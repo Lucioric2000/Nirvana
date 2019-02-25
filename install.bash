@@ -8,6 +8,15 @@
 # installed on your computer:
 # https://www.microsoft.com/net/download/core
 
+#. NET Core install:
+
+sudo rpm -Uvh https://packages.microsoft.com/config/rhel/7/packages-microsoft-prod.rpm
+sudo yum update
+#sudo yum install aspnetcore-runtime-2.2
+sudo yum install aspnetcore-runtime-2.0 #Use the version used to build the package
+
+# Nirvana install
+
 NIRVANA_ROOT=/usr/local/Nirvana
 NIRVANA_BIN=$NIRVANA_ROOT/bin/Release/netcoreapp2.0/Nirvana.dll
 DATA_DIR=$NIRVANA_ROOT/Data
