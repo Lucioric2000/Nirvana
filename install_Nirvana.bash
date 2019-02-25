@@ -1,4 +1,28 @@
 #!/bin/bash
+qseqdnamatch=`expr match "$(pwd)" '.*\(Nirvana\)'`
+if [[ $qseqdnamatch = "Nirvana" ]]
+then
+    echo "Already in Nirvana folder."
+    git pull origin master
+else
+    #Now, this script, when executed from outside the qiaseq folder, it downloads the qiaseq repository and then executes the script 'install_qiaseq_dna.bash'.
+    #This allows that the installer be updated and not to have to provide the updated installer script
+    echo "Not in Nirvana folder."
+    if [[ -d "Nirvana" ]]
+    then
+        cd Nirvana & ./install_Nirvana.bash $@
+    elif [[ -e "Nirvana" ]]
+    then
+        echo "File Nirvana exists but it is not a directory, thus we can not create a directory with that path tho hold the software reposotory. \
+        See if it is safe to delete or move it, and then execute again this script."
+    else
+        git clone https://github.com/Lucioric2000/Nirvana
+        cd Nirvana & ./install_Nirvana.bash $@
+    fi
+    exit
+fi
+
+
 
 # adjust these paths to reflect where you have downloaded the Nirvana data files
 # In this example, we assume that the Cache, References, and SupplementaryDatabase
