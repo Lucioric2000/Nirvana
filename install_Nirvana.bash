@@ -10,7 +10,6 @@ else
     echo "Not in Nirvana folder."
     if [[ -d "Nirvana" ]]
     then
-        echo "dnir"
         cd Nirvana && ./install_Nirvana.bash $@
     elif [[ -e "Nirvana" ]]
     then
@@ -22,7 +21,6 @@ else
     fi
     exit
 fi
-exit
 
 # adjust these paths to reflect where you have downloaded the Nirvana data files
 # In this example, we assume that the Cache, References, and SupplementaryDatabase
@@ -181,7 +179,3 @@ fi
 
 # analyze it with Nirvana
 echo dotnet $NIRVANA_BIN -c $CACHE_DIR/Ensembl --sd $SA_DIR/$GENOME_ASSEMBLY -r $REF_TEST -i HiSeq.10000.vcf -o HiSeq.10000.annotated
-
-#CAAVEATS:
-#I needed too conver the nirvana dir to belong to my user with the command:
-#sudo chown lucioric:lucioric -R /usr/local/Nirvana/
