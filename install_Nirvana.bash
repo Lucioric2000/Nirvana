@@ -21,8 +21,7 @@ else
     fi
     exit
 fi
-
-
+exit
 
 # adjust these paths to reflect where you have downloaded the Nirvana data files
 # In this example, we assume that the Cache, References, and SupplementaryDatabase
