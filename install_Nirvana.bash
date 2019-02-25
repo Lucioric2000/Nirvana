@@ -10,14 +10,15 @@ else
     echo "Not in Nirvana folder."
     if [[ -d "Nirvana" ]]
     then
-        cd Nirvana & ./install_Nirvana.bash $@
+        echo "dnir"
+        cd Nirvana && ./install_Nirvana.bash $@
     elif [[ -e "Nirvana" ]]
     then
         echo "File Nirvana exists but it is not a directory, thus we can not create a directory with that path tho hold the software reposotory. \
         See if it is safe to delete or move it, and then execute again this script."
     else
         git clone https://github.com/Lucioric2000/Nirvana
-        cd Nirvana & ./install_Nirvana.bash $@
+        cd Nirvana && ./install_Nirvana.bash $@
     fi
     exit
 fi
