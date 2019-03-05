@@ -178,4 +178,6 @@ then
 fi
 
 # analyze it with Nirvana
-echo dotnet $NIRVANA_BIN -c $CACHE_DIR/Ensembl --sd $SA_DIR/$GENOME_ASSEMBLY -r $REF_TEST -i HiSeq.10000.vcf -o HiSeq.10000.annotated
+COMMAND="dotnet $NIRVANA_BIN -c $CACHE_DIR/Ensembl --sd $SA_DIR/$GENOME_ASSEMBLY -r $REF_TEST -i HiSeq.10000.vcf -o HiSeq.10000.annotated"
+echo Running $COMMAND
+$COMMAND
