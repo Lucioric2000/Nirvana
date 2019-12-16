@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using CommonUtilities;
+using Genome;
+using IO;
+using OptimizedCore;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Sequence;
 
 namespace CacheUtils.IntermediateIO
 {
@@ -18,7 +19,7 @@ namespace CacheUtils.IntermediateIO
         internal RegulatoryRegionReader(Stream stream, IDictionary<ushort, IChromosome> refIndexToChromosome)
         {
             _refIndexToChromosome = refIndexToChromosome;
-            _reader = new StreamReader(stream);
+            _reader = FileUtilities.GetStreamReader(stream);
             IntermediateIoCommon.ReadHeader(_reader, IntermediateIoCommon.FileType.Regulatory);
         }
 
@@ -38,15 +39,15 @@ namespace CacheUtils.IntermediateIO
 
         private IRegulatoryRegion GetNextRegulatoryRegion()
         {
-            var line = _reader.ReadLine();
+            string line = _reader.ReadLine();
             if (line == null) return null;
 
-            var cols           = line.Split('\t');
-            var referenceIndex = ushort.Parse(cols[1]);
-            var start          = int.Parse(cols[2]);
-            var end            = int.Parse(cols[3]);
-            var id             = CompactId.Convert(cols[4]);
-            var type           = (RegulatoryRegionType)byte.Parse(cols[6]);
+            var cols              = line.OptimizedSplit('\t');
+            ushort referenceIndex = ushort.Parse(cols[1]);
+            int start             = int.Parse(cols[2]);
+            int end               = int.Parse(cols[3]);
+            var id                = CompactId.Convert(cols[4]);
+            var type              = (RegulatoryRegionType)byte.Parse(cols[6]);
 
             var chromosome = ReferenceNameUtilities.GetChromosome(_refIndexToChromosome, referenceIndex);
             return new RegulatoryRegion(chromosome, start, end, id, type);

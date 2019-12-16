@@ -2,9 +2,9 @@
 using System.Linq;
 using CacheUtils.Genes.Utilities;
 using CacheUtils.MiniCache;
-using VariantAnnotation.Caches.DataStructures;
+using Genome;
+using Intervals;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
 
 namespace CacheUtils.TranscriptCache
 {
@@ -12,7 +12,9 @@ namespace CacheUtils.TranscriptCache
     {
         public static List<ITranscript> GetTranscripts(DataBundle bundle, IChromosomeInterval interval)
         {
-            var overlappingTranscripts = bundle.TranscriptCache.GetOverlappingTranscripts(interval.Chromosome, interval.Start, interval.End);
+            ITranscript[] overlappingTranscripts =
+                bundle.TranscriptCache.TranscriptIntervalForest.GetAllOverlappingValues(interval.Chromosome.Index,
+                    interval.Start, interval.End);
             return overlappingTranscripts?.ToList() ?? new List<ITranscript>();
         }
 

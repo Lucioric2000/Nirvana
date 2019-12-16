@@ -5,7 +5,7 @@ using System.Linq;
 using CacheUtils.Genes.Combiners;
 using CacheUtils.Genes.DataStructures;
 using CacheUtils.TranscriptCache.Comparers;
-using VariantAnnotation.Interface.Intervals;
+using Intervals;
 
 namespace CacheUtils.Genes
 {
@@ -21,7 +21,7 @@ namespace CacheUtils.Genes
 
             var combiners = GetCombiners();
 
-            foreach (var refIndex in referenceIndices.OrderBy(x => x))
+            foreach (ushort refIndex in referenceIndices.OrderBy(x => x))
             {
                 var ugaGenesByRef = CombineByReference(GetUgaGenesByRef(genesByRef37, refIndex),
                     GetUgaGenesByRef(genesByRef38, refIndex), combiners);
@@ -38,8 +38,8 @@ namespace CacheUtils.Genes
         private static IEnumerable<ushort> GetReferenceIndices(IEnumerable<ushort> keysA, IEnumerable<ushort> keysB)
         {
             var referenceIndices = new HashSet<ushort>();
-            foreach (var key in keysA) referenceIndices.Add(key);
-            foreach (var key in keysB) referenceIndices.Add(key);
+            foreach (ushort key in keysA) referenceIndices.Add(key);
+            foreach (ushort key in keysB) referenceIndices.Add(key);
             return referenceIndices.OrderBy(x => x);
         }
 

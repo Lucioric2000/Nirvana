@@ -1,13 +1,12 @@
 ﻿using System.Linq;
+using Genome;
 using Moq;
 using VariantAnnotation.AnnotatedPositions;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.Sequence;
+using Variants;
 using Xunit;
 
 namespace UnitTests.VariantAnnotation.AnnotatedPositions
@@ -44,7 +43,7 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
 
         private static IVariant GetVariant()
         {
-            var behavior = new AnnotationBehavior(false, false, false, false, false, false);
+            var behavior = new AnnotationBehavior(false, false, false, false, false);
 
             var variant = new Mock<IVariant>();
             variant.SetupGet(x => x.Type).Returns(VariantType.SNV);

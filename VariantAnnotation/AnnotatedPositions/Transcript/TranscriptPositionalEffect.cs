@@ -1,8 +1,7 @@
 ﻿using System.Linq;
-using VariantAnnotation.Algorithms;
+using Intervals;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Positions;
+using Variants;
 
 namespace VariantAnnotation.AnnotatedPositions.Transcript
 {
@@ -34,8 +33,6 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             {
                 if (region.Type != TranscriptRegionType.Intron) continue;
 
-                // TODO: we should sort our introns so that we can end early
-
                 // skip this one if variant is out of range : the range is set to 3 instead of the original old:
                 // all of the checking occured in the region between start-3 to end+3, if we set to 8, we can made mistakes when
                 // checking IsWithinIntron when we have a small exon
@@ -48,37 +45,14 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
 
                 var isFrameshiftIntron = region.End - region.Start <= 12;
 
-                if (isFrameshiftIntron)
+                if (isFrameshiftIntron && variant.Overlaps(region.Start, region.End))
                 {
-                    if (variant.Overlaps(region.Start, region.End))
-                    {
-                        IsWithinFrameshiftIntron = true;
-                        continue;
-                    }
+                    IsWithinFrameshiftIntron = true;
+                    continue;
                 }
 
-                if (variant.Overlaps(region.Start, region.Start + 1))
-                {
-                    IsStartSpliceSite = true;
-                }
-
-                if (variant.Overlaps(region.End - 1, region.End))
-                {
-                    IsEndSpliceSite = true;
-                }
-
-                // we need to special case insertions between the donor and acceptor sites
-
-                //make sure the size of intron is larger than 4
-                if (region.Start <= region.End - 4)
-                {
-                    if (variant.Overlaps(region.Start + 2, region.End - 2) ||
-                        isInsertion && (variant.Start == region.Start + 2
-                                        || variant.End == region.End - 2))
-                    {
-                        IsWithinIntron = true;
-                    }
-                }
+                CheckSpliceSiteOverlap(variant, region);
+                CheckIntronOverlap(variant, isInsertion, region);
 
                 // the definition of splice_region (SO:0001630) is "within 1-3 bases of the
                 // exon or 3-8 bases of the intron." We also need to special case insertions
@@ -93,6 +67,32 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
                                             variant.End == region.End ||
                                             variant.Start == region.Start + 2 ||
                                             variant.End == region.End - 2);
+            }
+        }
+
+        private void CheckSpliceSiteOverlap(IInterval variant, IInterval region)
+        {
+            if (variant.Overlaps(region.Start, region.Start + 1))
+            {
+                IsStartSpliceSite = true;
+            }
+
+            if (variant.Overlaps(region.End - 1, region.End))
+            {
+                IsEndSpliceSite = true;
+            }
+        }
+
+        private void CheckIntronOverlap(IInterval variant, bool isInsertion, IInterval region)
+        {
+            // we need to special case insertions between the donor and acceptor sites
+            // make sure the size of intron is larger than 4
+            if (region.Start <= region.End - 4 && (variant.Overlaps(region.Start + 2, region.End - 2) ||
+                                                   isInsertion &&
+                                                   (variant.Start == region.Start + 2 ||
+                                                    variant.End == region.End - 2)))
+            {
+                IsWithinIntron = true;
             }
         }
 
@@ -124,12 +124,6 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
                 transcript.BioType == BioType.miRNA);
         }
 
-        private static bool HasExonRegionOverlap(ITranscriptRegion region, IInterval variant)
-        {
-            if (region == null || region.Type != TranscriptRegionType.Exon) return false;
-            return region.Overlaps(variant);
-        }
-
         internal static bool IsMatureMirnaVariant(int cdnaStart, int cdnaEnd, IInterval[] microRnas, bool isMiRna)
         {
             if (microRnas == null) return false;
@@ -145,7 +139,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
                 return true;
             }
 
-            var result = IntervalUtilities.Overlaps(variantRefBegin, variantRefEnd, codingRegionEnd + 1, transcriptEnd);
+            var result = Intervals.Utilities.Overlaps(variantRefBegin, variantRefEnd, codingRegionEnd + 1, transcriptEnd);
 
             return result;
         }
@@ -155,7 +149,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             // special case to handle insertions before the CDS start
             if (variantRefBegin == variantRefEnd + 1 && variantRefBegin == codingRegionStart) return true;
 
-            bool result = IntervalUtilities.Overlaps(variantRefBegin, variantRefEnd, transcriptStart, codingRegionStart - 1);
+            bool result = Intervals.Utilities.Overlaps(variantRefBegin, variantRefEnd, transcriptStart, codingRegionStart - 1);
             return result;
         }
 

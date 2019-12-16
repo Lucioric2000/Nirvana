@@ -1,7 +1,6 @@
-﻿using VariantAnnotation.Algorithms;
+﻿using Intervals;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Positions;
+using Variants;
 
 namespace VariantAnnotation.AnnotatedPositions.Transcript
 {
@@ -22,12 +21,12 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
         {
             _isSv = isSv;
 
-            _completelyOverlaps = IntervalUtilities.Contains(variant.Start, variant.End, feature.Start, feature.End);
+            _completelyOverlaps = Intervals.Utilities.Contains(variant.Start, variant.End, feature.Start, feature.End);
             _overlaps           = feature.Overlaps(variant);
             _completelyWithin   = variant.Start >= feature.Start && variant.End <= feature.End;
 
-            _lossOrDeletion      = vt == VariantType.copy_number_loss || vt == VariantType.deletion || vt == VariantType.copy_number_loss;
-            _gainOrDuplication   = vt == VariantType.copy_number_gain || vt == VariantType.duplication || vt == VariantType.tandem_duplication || vt == VariantType.copy_number_gain;
+            _lossOrDeletion      = vt == VariantType.copy_number_loss || vt == VariantType.deletion;
+            _gainOrDuplication   = vt == VariantType.copy_number_gain || vt == VariantType.duplication || vt == VariantType.tandem_duplication;
             _isInsertionDeletion = vt == VariantType.indel;
             _isInsertion         = vt == VariantType.insertion;
         }

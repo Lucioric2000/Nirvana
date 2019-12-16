@@ -1,30 +1,33 @@
 ﻿using System.Data;
 using System.Security.Cryptography;
 using System.Text;
-using CommonUtilities;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
+using Genome;
+using OptimizedCore;
+using VariantAnnotation.Interface.IO;
+using Variants;
 
 namespace Vcf.VariantCreator
 {
     public static class SmallVariantCreator
     {
-        private static readonly AnnotationBehavior SmallVariantBehavior = new AnnotationBehavior(true, false, false, true, false, false);
-
-        public static IVariant Create(IChromosome chromosome, int start, string refAllele, string altAllele, bool isDecomposedVar, bool isRecomposed)
+        public static IVariant Create(IChromosome chromosome, int start, string refAllele, string altAllele, bool isDecomposedVar, bool isRecomposed, string[] linkedVids)
         {
-            if (isDecomposedVar && isRecomposed) throw new InvalidConstraintException("A variant cann't be both decomposed and recomposed");
+            if (isDecomposedVar && isRecomposed) throw new InvalidConstraintException("A variant can't be both decomposed and recomposed");
             (start, refAllele, altAllele) = BiDirectionalTrimmer.Trim(start, refAllele, altAllele);
-            var end = start + refAllele.Length - 1;
+            int end = start + refAllele.Length - 1;
 
             var variantType = GetVariantType(refAllele, altAllele);
-            var vid         = GetVid(chromosome.EnsemblName, start, end, altAllele, variantType);
+            string vid      = GetVid(chromosome.EnsemblName, start, end, altAllele, variantType);
 
-			return new Variant(chromosome, start, end, refAllele, altAllele, variantType, vid, false, isDecomposedVar, isRecomposed, null, null, SmallVariantBehavior);
-		}
-		private static string GetVid(string ensemblName, int start, int end, string altAllele, VariantType type)
-		{
-            var referenceName = ensemblName;
+            var annotationBehavior = variantType == VariantType.non_informative_allele
+                ? AnnotationBehavior.MinimalAnnotationBehavior
+                : AnnotationBehavior.SmallVariantBehavior; 
+            return new Variant(chromosome, start, end, refAllele, altAllele, variantType, vid, false, isDecomposedVar, isRecomposed, linkedVids, null, annotationBehavior);
+        }
+
+        public static string GetVid(string ensemblName, int start, int end, string altAllele, VariantType type)
+        {
+            string referenceName = ensemblName;
 
             // ReSharper disable once SwitchStatementMissingSomeCases
             switch (type)
@@ -38,6 +41,8 @@ namespace Vcf.VariantCreator
                 case VariantType.MNV:
                 case VariantType.indel:
                     return $"{referenceName}:{start}:{end}:{GetInsertedAltAllele(altAllele)}";
+                case VariantType.non_informative_allele:
+                    return $"{referenceName}:{start}:*";
                 default:
                     return null;
             }
@@ -49,18 +54,19 @@ namespace Vcf.VariantCreator
 
             var md5Hash    = MD5.Create();
             var md5Builder = StringBuilderCache.Acquire();
-
-            var data = md5Hash.ComputeHash(Encoding.UTF8.GetBytes(altAllele));
+            var data       = md5Hash.ComputeHash(Encoding.UTF8.GetBytes(altAllele));
 
             md5Builder.Clear();
-            foreach (var b in data) md5Builder.Append(b.ToString("x2"));
+            foreach (byte b in data) md5Builder.Append(b.ToString("x2"));
             return StringBuilderCache.GetStringAndRelease(md5Builder);
         }
 
         public static VariantType GetVariantType(string refAllele, string altAllele)
         {
-            var referenceAlleleLen = refAllele.Length;
-            var alternateAlleleLen = altAllele.Length;
+            if (VcfCommon.IsNonInformativeAltAllele(altAllele)) return VariantType.non_informative_allele;
+
+            int referenceAlleleLen = refAllele.Length;
+            int alternateAlleleLen = altAllele.Length;
 
             if (alternateAlleleLen != referenceAlleleLen)
             {

@@ -7,19 +7,18 @@ using CacheUtils.Sequence;
 using CacheUtils.TranscriptCache;
 using CommandLine.Builders;
 using CommandLine.NDesk.Options;
-using CommonUtilities;
 using ErrorHandling;
+using Genome;
+using Intervals;
+using IO;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Sequence;
 using VariantAnnotation.IO.Caches;
 using VariantAnnotation.Logger;
 using VariantAnnotation.Providers;
 using VariantAnnotation.Sequence;
-using VariantAnnotation.Utilities;
 
 namespace CacheUtils.Commands.ExtractTranscripts
 {
@@ -114,9 +113,8 @@ namespace CacheUtils.Commands.ExtractTranscripts
             logger.Write($"- retrieving {description} predictions... ");
 
             var indexSet          = GetUniqueIndices(transcripts, indexFunc);
-            var lut               = reader.Header.Lut;
             var predictionsPerRef = GetPredictions(indexSet, chromosome, numRefSeqs, oldPredictions);
-            var staging           = new PredictionCacheStaging(reader.Header.Header, lut, predictionsPerRef);
+            var staging           = new PredictionCacheStaging(reader.Header, predictionsPerRef);
 
             logger.WriteLine($"found {indexSet.Count} predictions.");
             return (staging, predictionsPerRef[chromosome.Index]);
@@ -151,7 +149,10 @@ namespace CacheUtils.Commands.ExtractTranscripts
             ITranscriptCache cache, IChromosomeInterval interval, int numRefSeqs)
         {
             logger.Write("- retrieving regulatory regions... ");
-            var regulatoryRegions = cache.GetOverlappingRegulatoryRegions(interval);
+            var regulatoryIntervalForest = cache.RegulatoryIntervalForest;
+            var regulatoryRegions =
+                regulatoryIntervalForest.GetAllOverlappingValues(interval.Chromosome.Index, interval.Start,
+                    interval.End);
             logger.WriteLine($"found {regulatoryRegions.Length} regulatory regions.");
             return regulatoryRegions.ToIntervalArrays(numRefSeqs);
         }

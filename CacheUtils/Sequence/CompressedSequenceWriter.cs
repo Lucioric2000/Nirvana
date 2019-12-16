@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.IO;
+using Genome;
+using IO;
 using VariantAnnotation.Sequence;
 
 namespace CacheUtils.Sequence
@@ -22,7 +22,7 @@ namespace CacheUtils.Sequence
         private long _maskedIntervalsOffset;
 
         public CompressedSequenceWriter(Stream stream, IReadOnlyCollection<ReferenceMetadata> referenceMetadataList,
-            ICytogeneticBands genomeCytobands, GenomeAssembly genomeAssembly)
+            ISerializable genomeCytobands, GenomeAssembly genomeAssembly)
         {
             _stream                = stream;
             _writer                = new ExtendedBinaryWriter(_stream);
@@ -135,7 +135,7 @@ namespace CacheUtils.Sequence
             _writer.Write(_maskedIntervalsOffset);
         }
 
-        private void WriteHeader(IReadOnlyCollection<ReferenceMetadata> referenceMetadataList, ICytogeneticBands genomeCytobands, GenomeAssembly genomeAssembly)
+        private void WriteHeader(IReadOnlyCollection<ReferenceMetadata> referenceMetadataList, ISerializable genomeCytobands, GenomeAssembly genomeAssembly)
         {
             _writer.Write(CompressedSequenceCommon.HeaderTag);
             _writer.Write(CompressedSequenceCommon.HeaderVersion);

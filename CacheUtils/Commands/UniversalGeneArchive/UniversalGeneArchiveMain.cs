@@ -6,19 +6,19 @@ using CacheUtils.Genes;
 using CacheUtils.Genes.DataStores;
 using CacheUtils.Genes.DataStructures;
 using CacheUtils.Genes.IO;
-using CacheUtils.Helpers;
 using CommandLine.Builders;
 using CommandLine.NDesk.Options;
 using CommandLine.Utilities;
 using Compression.FileHandling;
 using Compression.Utilities;
 using ErrorHandling;
+using Genome;
+using IO;
 using Microsoft.Extensions.Configuration;
 using VariantAnnotation.Interface;
-using VariantAnnotation.Interface.Sequence;
 using VariantAnnotation.Logger;
 using VariantAnnotation.Providers;
-using VariantAnnotation.Utilities;
+using VariantAnnotation.Sequence;
 
 namespace CacheUtils.Commands.UniversalGeneArchive
 {

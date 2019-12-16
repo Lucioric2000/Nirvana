@@ -11,10 +11,10 @@ namespace CacheUtils.PredictionCache
     {
         private readonly BinaryWriter _writer;
         private readonly BlockStream _blockStream;
-        private readonly CacheHeader _header;
+        private readonly PredictionHeader _header;
         private readonly bool _leaveOpen;
 
-        public PredictionCacheWriter(BlockStream blockStream, CacheHeader header, bool leaveOpen = false)
+        public PredictionCacheWriter(BlockStream blockStream, PredictionHeader header, bool leaveOpen = false)
         {
             _blockStream = blockStream;
             _writer      = new BinaryWriter(blockStream);
@@ -28,9 +28,6 @@ namespace CacheUtils.PredictionCache
             _writer.Dispose();
         }
 
-        /// <summary>
-        /// writes the annotations to the current database file
-        /// </summary>
         internal void Write(Prediction.Entry[] lut, Prediction[][] predictionsPerRef)
         {
             _blockStream.WriteHeader(_header.Write);
@@ -41,19 +38,14 @@ namespace CacheUtils.PredictionCache
 
         private void WritePredictions(IReadOnlyList<Prediction[]> predictionsPerRef)
         {
-            // ReSharper disable once UsePatternMatching
-            var customHeader = _header.CustomHeader as PredictionCacheCustomHeader;
-            if (customHeader == null) throw new InvalidCastException();
-
-            var indexEntries  = customHeader.Entries;
-            var blockPosition = new BlockStream.BlockPosition();
+            var indexEntries = _header.Custom.Entries;
 
             for (var i = 0; i < predictionsPerRef.Count; i++)
             {
 	            var refPredictions = predictionsPerRef[i];
 
-				_blockStream.GetBlockPosition(blockPosition);
-                indexEntries[i].FileOffset = blockPosition.FileOffset;
+				var position = _blockStream.GetBlockPosition();
+                indexEntries[i].FileOffset = position.FileOffset;
                 indexEntries[i].Count      = refPredictions?.Length ?? 0;
 
                 if (refPredictions != null)

@@ -1,16 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Compression.Utilities;
+using Genome;
+using OptimizedCore;
 using SAUtils.DataStructures;
 using VariantAnnotation.Interface.IO;
-using VariantAnnotation.Interface.Sequence;
+using VariantAnnotation.Interface.Providers;
+using Variants;
 
 namespace SAUtils.InputFileParsers.Cosmic
 {
     public sealed class MergedCosmicReader 
     {
-        #region members
-
         private readonly StreamReader _vcfFileReader;
         private readonly StreamReader _tsvFileReader;
         private string _geneName;
@@ -29,44 +32,31 @@ namespace SAUtils.InputFileParsers.Cosmic
 
         private int _studyIdIndex = -1;
 
-        private const string MutationIdTag       = "Mutation ID";
-        private const string PrimarySiteTag      = "Primary site";
-        private const string SiteSubtypeOneTag   = "Site subtype 1";
-        private const string SiteSubtypeTwoTag   = "Site subtype 2";
-        private const string SiteSubtypeThreeTag = "Site subtype 3";
-
-        private const string PrimaryHistologyTag      = "Primary histology";
-        private const string HistologySubtypeOneTag   = "Histology subtype 1";
-        private const string HistologySubtypeTwoTag   = "Histology subtype 2";
-        private const string HistologySubtypeThreeTag = "Histology subtype 3";
-
         private const string StudyIdTag = "ID_STUDY";
 
         private readonly IDictionary<string, IChromosome> _refChromDict;
+        private readonly ISequenceProvider _sequenceProvider;
         private readonly Dictionary<string, HashSet<CosmicItem.CosmicStudy>> _studies;
 
-        #endregion
-
-        // constructor
-        public MergedCosmicReader(StreamReader vcfFileReader, StreamReader tsvFileReader, IDictionary<string, IChromosome> refChromDict)
+        public MergedCosmicReader(string vcfFile, string tsvFile, ISequenceProvider sequenceProvider)
         {
-            _vcfFileReader = vcfFileReader;
-            _tsvFileReader = tsvFileReader;
-            _refChromDict  = refChromDict;
+            _vcfFileReader = GZipUtilities.GetAppropriateStreamReader(vcfFile);
+            _tsvFileReader = GZipUtilities.GetAppropriateStreamReader(tsvFile);
+            _sequenceProvider = sequenceProvider;
+            _refChromDict  = _sequenceProvider.RefNameToChromosome;
             _studies       = new Dictionary<string, HashSet<CosmicItem.CosmicStudy>>();
         }
-
         
-        public IEnumerable<CosmicItem> GetCosmicItems()
+        public IEnumerable<CosmicItem> GetItems()
         {
-            //taking up all studies in to the dictionary
+            // taking up all studies in to the dictionary
             using (_tsvFileReader)
             {
                 string line;
                 while ((line = _tsvFileReader.ReadLine()) != null)
                 {
                     if (IsHeaderLine(line))
-                        GetColumnIndexes(line);//the first line is supposed to be a the header line
+                        GetColumnIndexes(line); // the first line is supposed to be a the header line
                     else AddCosmicStudy(line);
                 }
             }
@@ -78,8 +68,9 @@ namespace SAUtils.InputFileParsers.Cosmic
                 {
                     // Skip empty lines.
                     if (string.IsNullOrWhiteSpace(line)) continue;
+
                     // Skip comments.
-                    if (line.StartsWith("#")) continue;
+                    if (line.OptimizedStartsWith('#')) continue;
                     var cosmicItems = ExtractCosmicItems(line);
                     if (cosmicItems == null) continue;
 
@@ -93,13 +84,13 @@ namespace SAUtils.InputFileParsers.Cosmic
 
         private void AddCosmicStudy(string line)
         {
-            var columns = line.Split('\t');
+            var columns = line.OptimizedSplit('\t');
 
-            var mutationId  = columns[_mutationIdIndex];
-            var studyId     = columns[_studyIdIndex];
-            var sites       = GetSites(columns);
-            var histologies = GetHistologies(columns);
-
+            string mutationId  = columns[_mutationIdIndex];
+            string studyId     = columns[_studyIdIndex];
+            var sites          = GetSites(columns);
+            var histologies    = GetHistologies(columns);
+            
             if (string.IsNullOrEmpty(mutationId)) return;
 
             var study = new CosmicItem.CosmicStudy(studyId, histologies, sites);
@@ -108,40 +99,38 @@ namespace SAUtils.InputFileParsers.Cosmic
             else _studies[mutationId] = new HashSet<CosmicItem.CosmicStudy> { study };
         }
 
-        private IEnumerable<string> GetHistologies(string[] columns)
+        private IList<string> GetHistologies(string[] columns)
         {
             var histologies = new HashSet<string>();
+            var primaryHistology = columns[_primaryHistologyIndex].Replace('_', ' ');
+            TryAddValue(primaryHistology, histologies);
+            //TryAddValue(columns[_histologySubtypeOneIndex], histologies);
+            //TryAddValue(columns[_histologySubtypeTwoIndex], histologies);
+            //TryAddValue(columns[_histologySubtypeThreeIndex], histologies);
 
-            TryAddValue(columns[_primaryHistologyIndex], histologies);
-            TryAddValue(columns[_histologySubtypeOneIndex], histologies);
-            TryAddValue(columns[_histologySubtypeTwoIndex], histologies);
-            TryAddValue(columns[_histologySubtypeThreeIndex], histologies);
-
-            return histologies;
+            return histologies.ToList();
         }
 
-        private IEnumerable<string> GetSites(string[] columns)
+        private IList<string> GetSites(string[] columns)
         {
             var sites = new HashSet<string>();
 
-            TryAddValue(columns[_primarySiteIndex], sites);
-            TryAddValue(columns[_siteSubtypeOneIndex], sites);
-            TryAddValue(columns[_siteSubtypeTwoIndex], sites);
-            TryAddValue(columns[_siteSubtypeThreeIndex], sites);
+            var primarySite = columns[_primarySiteIndex].Replace('_', ' ');
+            TryAddValue(primarySite, sites);
+            //TryAddValue(columns[_siteSubtypeOneIndex], sites);
+            //TryAddValue(columns[_siteSubtypeTwoIndex], sites);
+            //TryAddValue(columns[_siteSubtypeThreeIndex], sites);
 
-            return sites;
+            return sites.ToList();
         }
 
-        private void TryAddValue(string value, HashSet<string> sites)
+        private static void TryAddValue(string value, ISet<string> sites)
         {
            if (!string.IsNullOrEmpty(value) && value != "NS")
                 sites.Add(value);
         }
 
-        private static bool IsHeaderLine(string line)
-        {
-            return line.Contains(StudyIdTag);
-        }
+        private static bool IsHeaderLine(string line) => line.Contains(StudyIdTag);
 
         private void GetColumnIndexes(string headerLine)
         {
@@ -152,43 +141,41 @@ namespace SAUtils.InputFileParsers.Cosmic
             _primarySiteIndex      = -1;
             _primaryHistologyIndex = -1;
 
-            var columns = headerLine.Split('\t');
+            var columns = headerLine.OptimizedSplit('\t');
             for (int i = 0; i < columns.Length; i++)
             {
                 switch (columns[i])
                 {
-                    case MutationIdTag:
+                    case "Mutation ID":
                         _mutationIdIndex = i;
                         break;
                     case StudyIdTag:
                         _studyIdIndex = i;
                         break;
-                    case PrimarySiteTag:
+                    case "Primary site":
                         _primarySiteIndex = i;
                         break;
-                    case SiteSubtypeOneTag:
+                    case "Site subtype 1":
                         _siteSubtypeOneIndex = i;
                         break;
-                    case SiteSubtypeTwoTag:
+                    case "Site subtype 2":
                         _siteSubtypeTwoIndex = i;
                         break;
-                    case SiteSubtypeThreeTag:
+                    case "Site subtype 3":
                         _siteSubtypeThreeIndex = i;
                         break;
-
-                    case PrimaryHistologyTag:
+                    case "Primary histology":
                         _primaryHistologyIndex = i;
                         break;
-                    case HistologySubtypeOneTag:
+                    case "Histology subtype 1":
                         _histologySubtypeOneIndex = i;
                         break;
-                    case HistologySubtypeTwoTag:
+                    case "Histology subtype 2":
                         _histologySubtypeTwoIndex = i;
                         break;
-                    case HistologySubtypeThreeTag:
+                    case "Histology subtype 3":
                         _histologySubtypeThreeIndex = i;
                         break;
-
                 }
             }
 
@@ -202,20 +189,22 @@ namespace SAUtils.InputFileParsers.Cosmic
                 throw new InvalidDataException("Column for primary histology could not be detected");
         }
 
+        private const int MaxVariantLength= 1000;
         internal List<CosmicItem> ExtractCosmicItems(string vcfLine)
         {
             var splitLine = vcfLine.Split(new[] { '\t' }, 8);
+            //skipping large variants
+            if (splitLine[VcfCommon.RefIndex].Length > MaxVariantLength || splitLine[VcfCommon.AltIndex].Length > MaxVariantLength) return null;
 
-            var chromosomeName = splitLine[VcfCommon.ChromIndex];
+            string chromosomeName = splitLine[VcfCommon.ChromIndex];
             if (!_refChromDict.ContainsKey(chromosomeName)) return null;
 
-            var chromosome = _refChromDict[chromosomeName];
-
-            var position   = int.Parse(splitLine[VcfCommon.PosIndex]);
-            var cosmicId   = splitLine[VcfCommon.IdIndex];
-            var refAllele  = splitLine[VcfCommon.RefIndex];
-            var altAlleles = splitLine[VcfCommon.AltIndex].Split(',');
-            var infoField  = splitLine[VcfCommon.InfoIndex];
+            var chromosome    = _refChromDict[chromosomeName];
+            int position      = int.Parse(splitLine[VcfCommon.PosIndex]);
+            string cosmicId   = splitLine[VcfCommon.IdIndex];
+            string refAllele  = splitLine[VcfCommon.RefIndex];
+            var altAlleles    = splitLine[VcfCommon.AltIndex].OptimizedSplit(',');
+            string infoField  = splitLine[VcfCommon.InfoIndex];
 
             Clear();
 
@@ -223,14 +212,16 @@ namespace SAUtils.InputFileParsers.Cosmic
 
             var cosmicItems = new List<CosmicItem>();
 
-            foreach (var altAllele in altAlleles)
+            foreach (string altAllele in altAlleles)
             {
-                if (_studies.TryGetValue(cosmicId, out var studies))
-                {
-                    cosmicItems.Add(new CosmicItem(chromosome, position, cosmicId, refAllele, altAllele, _geneName, studies, _sampleCount));
-                }
-                else cosmicItems.Add(new CosmicItem(chromosome, position, cosmicId, refAllele, altAllele, _geneName, null, _sampleCount));
-                
+                var (shiftedPos, shiftedRef, shiftedAlt) = VariantUtils.TrimAndLeftAlign(position, refAllele,
+                    altAllele, _sequenceProvider.Sequence);
+
+                cosmicItems.Add(_studies.TryGetValue(cosmicId, out var studies)
+                    ? new CosmicItem(chromosome, shiftedPos, cosmicId, shiftedRef, shiftedAlt, _geneName, studies,
+                        _sampleCount)
+                    : new CosmicItem(chromosome, shiftedPos, cosmicId, shiftedRef, shiftedAlt, _geneName, null,
+                        _sampleCount));
             }
 
             return cosmicItems;
@@ -245,20 +236,16 @@ namespace SAUtils.InputFileParsers.Cosmic
         private void ParseInfoField(string infoFields)
         {
             if (infoFields == "" || infoFields == ".") return;
+            var infoItems = infoFields.OptimizedSplit(';');
 
-            var infoItems = infoFields.Split(';');
-            foreach (var infoItem in infoItems)
+            foreach (string infoItem in infoItems)
             {
                 if (string.IsNullOrEmpty(infoItem)) continue;
 
-                var infoKeyValue = infoItem.Split('=');
-                if (infoKeyValue.Length == 2)//sanity check
-                {
-                    var key = infoKeyValue[0];
-                    var value = infoKeyValue[1];
+                (string key, string value) = infoItem.OptimizedKeyValue();
 
-                    SetInfoField(key, value);
-                }
+                // sanity check
+                if (value != null) SetInfoField(key, value);
             }
         }
 
@@ -273,8 +260,6 @@ namespace SAUtils.InputFileParsers.Cosmic
                     _sampleCount = Convert.ToInt32(value);
                     break;
             }
-        }
-
-        
+        }       
     }
 }

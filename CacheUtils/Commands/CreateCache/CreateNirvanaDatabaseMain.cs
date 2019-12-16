@@ -5,7 +5,6 @@ using CacheUtils.DataDumperImport.DataStructures.Mutable;
 using CacheUtils.Genes.DataStructures;
 using CacheUtils.Genes.IO;
 using CacheUtils.Genes.Utilities;
-using CacheUtils.Helpers;
 using CacheUtils.IntermediateIO;
 using CacheUtils.PredictionCache;
 using CacheUtils.TranscriptCache;
@@ -13,14 +12,14 @@ using CommandLine.Builders;
 using CommandLine.NDesk.Options;
 using Compression.Utilities;
 using ErrorHandling;
-using VariantAnnotation.Caches.DataStructures;
+using Genome;
+using Intervals;
+using IO;
 using VariantAnnotation.Interface;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Sequence;
 using VariantAnnotation.IO.Caches;
 using VariantAnnotation.Logger;
 using VariantAnnotation.Providers;
-using VariantAnnotation.Utilities;
+using VariantAnnotation.Sequence;
 
 namespace CacheUtils.Commands.CreateCache
 {
@@ -39,7 +38,7 @@ namespace CacheUtils.Commands.CreateCache
             string polyphenPath   = _inputPrefix + ".polyphen.gz";
             string regulatoryPath = _inputPrefix + ".regulatory.gz";
 
-            var (refIndexToChromosome, refNameToChromosome, numRefSeqs) = SequenceHelper.GetDictionaries(_inputReferencePath);
+            (var refIndexToChromosome, var refNameToChromosome, int numRefSeqs) = SequenceHelper.GetDictionaries(_inputReferencePath);
 
             using (var transcriptReader = new MutableTranscriptReader(GZipUtilities.GetAppropriateReadStream(transcriptPath), refIndexToChromosome))
             using (var regulatoryReader = new RegulatoryRegionReader(GZipUtilities.GetAppropriateReadStream(regulatoryPath), refIndexToChromosome))
@@ -47,7 +46,7 @@ namespace CacheUtils.Commands.CreateCache
             using (var polyphenReader   = new PredictionReader(GZipUtilities.GetAppropriateReadStream(polyphenPath), refIndexToChromosome, IntermediateIoCommon.FileType.Polyphen))
             using (var geneReader       = new UgaGeneReader(GZipUtilities.GetAppropriateReadStream(ExternalFiles.UniversalGeneFilePath), refNameToChromosome))
             {
-                var genomeAssembly   = transcriptReader.Header.GenomeAssembly;
+                var genomeAssembly   = transcriptReader.Header.Assembly;
                 var source           = transcriptReader.Header.Source;
                 long vepReleaseTicks = transcriptReader.Header.VepReleaseTicks;
                 ushort vepVersion    = transcriptReader.Header.VepVersion;

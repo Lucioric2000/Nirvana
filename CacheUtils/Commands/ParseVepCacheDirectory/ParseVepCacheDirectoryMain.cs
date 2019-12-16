@@ -9,13 +9,13 @@ using System.Collections.Generic;
 using CacheUtils.Commands.Download;
 using CacheUtils.Genbank;
 using CacheUtils.Logger;
+using Genome;
+using IO;
 using VariantAnnotation.Interface;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Sequence;
 using VariantAnnotation.Logger;
 using VariantAnnotation.Providers;
 using VariantAnnotation.Sequence;
-using VariantAnnotation.Utilities;
 
 namespace CacheUtils.Commands.ParseVepCacheDirectory
 {

@@ -1,10 +1,12 @@
 ﻿using System;
 using System.IO;
+using IO;
+using OptimizedCore;
 using VariantAnnotation.Providers;
-using VariantAnnotation.Utilities;
 
 namespace SAUtils.InputFileParsers
 {
+    /// <inheritdoc />
     /// <summary>
     /// reads data version from a file that is expected to be found alongside each supplementary data file
     /// </summary>
@@ -24,17 +26,9 @@ namespace SAUtils.InputFileParsers
         /// <summary>
         /// constructor
         /// </summary>
-        private DataSourceVersionReader(string fileName)
+        public DataSourceVersionReader(Stream fileStream)
         {
-            _reader = new StreamReader(FileUtilities.GetReadStream(fileName));
-        }
-
-        /// <summary>
-        /// constructor
-        /// </summary>
-        public DataSourceVersionReader(Stream stream)
-        {
-            _reader = new StreamReader(stream);
+            _reader = new StreamReader(fileStream);
         }
 
         public static DataSourceVersion GetSourceVersion(string versionFileName)
@@ -45,7 +39,14 @@ namespace SAUtils.InputFileParsers
                 throw new FileNotFoundException(versionFileName);
             }
 
-            using (var versionReader = new DataSourceVersionReader(versionFileName))
+            var fileStream = FileUtilities.GetReadStream(versionFileName);
+
+            return GetSourceVersion(fileStream);
+        }
+
+        private static DataSourceVersion GetSourceVersion(Stream versionFileStream)
+        {
+            using (var versionReader = new DataSourceVersionReader(versionFileStream))
             {
                 var version = versionReader.GetVersion();
                 return version;
@@ -63,22 +64,22 @@ namespace SAUtils.InputFileParsers
 
             while ((line = _reader.ReadLine()) != null)
             {
-                var words = line.Split('=');
-                if (words.Length < 2) continue;
+                (string key, string value) = line.OptimizedKeyValue();
+                if (key == null || value == null) continue;
 
-                switch (words[0])
+                switch (key)
                 {
                     case "NAME":
-                        name = words[1];
+                        name = value;
                         break;
                     case "VERSION":
-                        version = words[1];
+                        version = value;
                         break;
                     case "DATE":
-                        date = words[1];
+                        date = value;
                         break;
                     case "DESCRIPTION":
-                        description = words[1];
+                        description = value;
                         break;
                 }
             }

@@ -1,9 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.IO;
-using CommonUtilities;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
+using Genome;
+using OptimizedCore;
 using VariantAnnotation.IO;
+using Variants;
 
 namespace SAUtils.ExtractCosmicSvs
 {
@@ -11,7 +11,7 @@ namespace SAUtils.ExtractCosmicSvs
     public sealed class CosmicCnvItem
     {
         public readonly int CNVId;
-        public readonly IChromosome Chromosome;
+        private readonly IChromosome Chromosome;
         private readonly VariantType _cnvType;
         private readonly int _copyNumber;
         private readonly int _studyId;
@@ -33,8 +33,8 @@ namespace SAUtils.ExtractCosmicSvs
             _tissueTypes = tissueTypes;
         }
 
-        public int Start { get; }
-        public int End { get; }
+        private int Start { get; }
+        private int End { get; }
 
         public string GetJsonString()
         {

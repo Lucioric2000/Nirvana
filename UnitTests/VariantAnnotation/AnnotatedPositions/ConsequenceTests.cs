@@ -2,7 +2,7 @@
 using VariantAnnotation.AnnotatedPositions.Consequence;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Positions;
+using Variants;
 using Xunit;
 
 namespace UnitTests.VariantAnnotation.AnnotatedPositions
@@ -92,7 +92,7 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             {
                 IsWithinIntron = true
             };
-            var variantEffect = new VariantEffect(positionalEffect, simpleVariant.Object, null, null, null, null, null, null, cache);
+            var variantEffect = new VariantEffect(positionalEffect, simpleVariant.Object, null, null, null, null, null, null, null, null, cache);
 
             var featureEffect = new Mock<IFeatureVariantEffects>();
             featureEffect.Setup(x => x.Ablation()).Returns(false);

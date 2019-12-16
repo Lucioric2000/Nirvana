@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Compression.Utilities;
+using OptimizedCore;
 using VariantAnnotation.Interface.IO;
 
 namespace SAUtils.DbSnpRemapper
@@ -11,6 +12,7 @@ namespace SAUtils.DbSnpRemapper
         private readonly StreamReader _leftoverReader;
         private readonly StreamReader _destReader;
         private readonly Dictionary<string, StreamWriter> _writers;
+
         public LeftoverMapper(StreamReader leftoverReader, StreamReader destReader, Dictionary<string, StreamWriter> writers)
         {
             _leftoverReader = leftoverReader;
@@ -44,7 +46,7 @@ namespace SAUtils.DbSnpRemapper
             var leftoversWithDest = new Dictionary<long, GenomicLocation>();
             while ((line = _destReader.ReadLine()) != null)
             {
-                if (line.StartsWith("#")) continue;
+                if (line.OptimizedStartsWith('#')) continue;
                 var splits = line.Split('\t', 4);
                 var ids = Utilities.GetRsids(splits[VcfCommon.IdIndex]);
 
@@ -97,7 +99,6 @@ namespace SAUtils.DbSnpRemapper
                 chromName = "chr" + chromName;
             if (!_writers.ContainsKey(chromName))
             {
-                //throw new InvalidDataException("Unrecognized chromosome name:"+chromName);
                 Console.WriteLine($"Warning!! {chromName} was not present in source but is in destination");
                 _writers.Add(chromName, GZipUtilities.GetStreamWriter(chromName+".vcf.gz"));
             }

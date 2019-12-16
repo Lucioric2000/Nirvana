@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using ErrorHandling.Exceptions;
 using Jasix.DataStructures;
-using VariantAnnotation.Interface.IO;
 using VariantAnnotation.Interface.Positions;
 
 namespace Jasix
@@ -22,16 +21,11 @@ namespace Jasix
             _jasixIndex  = new JasixIndex();
         }
 
-        public void SetHeader(string header)
-        {
-            _jasixIndex.HeaderLine = header;
-        }
-
         public void Add(IPosition position, long fileLocation)
         {
-            var chromName = position.VcfFields[VcfCommon.ChromIndex];
-            var start     = position.Start;
-            var end       = position.InfoData.End;
+            string chromName = position.Chromosome.EnsemblName;
+            int start        = position.Start;
+            int? end          = position.InfoData?.End;
 
             if (chromName == _lastChromName && start < _lastPosition)
             {
@@ -43,13 +37,23 @@ namespace Jasix
 
             if (end == null)
             {
-                var altAlleles = position.AltAlleles;
+                string[] altAlleles = position.AltAlleles;
                 int altAlleleOffset = altAlleles != null && altAlleles.All(Utilities.IsNucleotideAllele) && altAlleles.Any(x => x.Length > 1) ? 1 : 0;
 
                 end = Math.Max(position.RefAllele.Length - 1, altAlleleOffset) + start;
             }
 
-            _jasixIndex.Add(position.Chromosome.EnsemblName, start, end.Value, fileLocation);
+            _jasixIndex.Add(position.Chromosome.EnsemblName, start, end.Value, fileLocation, position.Chromosome.UcscName);
+        }
+
+        public void BeginSection(string sectionName, long fileLocation)
+        {
+            _jasixIndex.BeginSection(sectionName, fileLocation);
+        }
+
+        public void EndSection(string sectionName, long fileLocation)
+        {
+            _jasixIndex.EndSection(sectionName, fileLocation);
         }
 
         public void Dispose()

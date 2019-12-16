@@ -2,16 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using OptimizedCore;
 using SAUtils.DataStructures;
 using VariantAnnotation.Interface.IO;
-using VariantAnnotation.Interface.Sequence;
+using VariantAnnotation.Interface.Providers;
+using Variants;
 
 namespace SAUtils.InputFileParsers
 {
 	public sealed class GnomadReader 
 	{
-	    private readonly StreamReader _reader;
-        private readonly IDictionary<string,IChromosome> _refChromDict;
+        private readonly StreamReader _reader;
+        private readonly ISequenceProvider _sequenceProvider;
 
         private int[] _acAll;
 		private int[] _acAfr;
@@ -44,16 +46,12 @@ namespace SAUtils.InputFileParsers
 	    private int[] _hcSas;
 
         private int? _totalDepth;
-	    private bool _hasFailedFilters;
 
-
-		public GnomadReader(StreamReader streamReader, IDictionary<string, IChromosome> refChromDict) 
+		public GnomadReader(StreamReader streamReader, ISequenceProvider sequenceProvider) 
 		{
-			_reader = streamReader;
-		    _refChromDict = refChromDict;
+			_reader       = streamReader;
+		    _sequenceProvider = sequenceProvider;
 		}
-
-        
 
 		private void Clear()
 		{
@@ -88,7 +86,6 @@ namespace SAUtils.InputFileParsers
 		    _hcSas = null;
 
             _totalDepth = null;
-		    _hasFailedFilters = false;
 		}
 
 		/// <summary>
@@ -96,7 +93,7 @@ namespace SAUtils.InputFileParsers
 		/// all the data objects that have been extracted.
 		/// </summary>
 		/// <returns></returns>
-		public IEnumerable<GnomadItem> GetGnomadItems()
+		public IEnumerable<GnomadItem> GetItems()
 		{
 			using (_reader)
 			{
@@ -105,8 +102,9 @@ namespace SAUtils.InputFileParsers
 				{
 					// Skip empty lines.
 					if (string.IsNullOrWhiteSpace(line)) continue;
+
 					// Skip comments.
-					if (line.StartsWith("#")) continue;
+					if (line.OptimizedStartsWith('#')) continue;
 					var gnomadItemsList = ExtractItems(line);
 					if (gnomadItemsList == null) continue;
 					foreach (var gnomadItem in gnomadItemsList)
@@ -126,23 +124,24 @@ namespace SAUtils.InputFileParsers
 	    private List<GnomadItem> ExtractItems(string vcfline)
 		{
 			if (vcfline == null) return null;
-			var splitLine = vcfline.Split( '\t');// we don't care about the many fields after info field
-			
-			if (splitLine.Length < 8) return null;
+            var splitLine = vcfline.OptimizedSplit('\t');
+
+            if (splitLine.Length < 8) return null;
 
 			Clear();
 
 			var chromosome = splitLine[VcfCommon.ChromIndex];
-			if (!_refChromDict.ContainsKey(chromosome)) return null;
+			if (!_sequenceProvider.RefNameToChromosome.ContainsKey(chromosome)) return null;
 
-		    var chrom      = _refChromDict[chromosome];
+		    var chrom      = _sequenceProvider.RefNameToChromosome[chromosome];
 			var position   = int.Parse(splitLine[VcfCommon.PosIndex]);//we have to get it from RSPOS in info
 			var refAllele  = splitLine[VcfCommon.RefIndex];
-			var altAlleles = splitLine[VcfCommon.AltIndex].Split(',');
+			var altAlleles = splitLine[VcfCommon.AltIndex].OptimizedSplit(',');
 		    var filters    = splitLine[VcfCommon.FilterIndex];
 			var infoFields = splitLine[VcfCommon.InfoIndex];
 
-		    _hasFailedFilters = !(filters.Equals("PASS") || filters.Equals("."));
+		    var hasFailedFilters = !(filters.Equals("PASS") || filters.Equals("."));
+
             // parses the info fields and extract frequencies, coverage, num samples.
 		    try
 		    {
@@ -162,12 +161,15 @@ namespace SAUtils.InputFileParsers
 
 			
 			for (int i = 0; i < altAlleles.Length; i++)
-			{
+            {
+                var (alignedPos, alignedRef, alignedAlt) =
+                    VariantUtils.TrimAndLeftAlign(position, refAllele, altAlleles[i], _sequenceProvider.Sequence);
+
 				gnomadItemsList.Add(new GnomadItem(
 					chrom,
-					position,
-					refAllele,
-					altAlleles[i],
+					alignedPos,
+					alignedRef,
+					alignedAlt,
                     _totalDepth,
 					_anAll, _anAfr,_anAmr,_anEas,_anFin,_anNfe,_anOth, _anAsj, _anSas,
 					GetCount(_acAll, i), GetCount(_acAfr, i), GetCount(_acAmr, i), GetCount(_acEas, i), 
@@ -175,7 +177,7 @@ namespace SAUtils.InputFileParsers
 			        GetCount(_acSas, i),
 					GetCount(_hcAll, i), GetCount(_hcAfr, i), GetCount(_hcAmr, i), GetCount(_hcEas, i), GetCount(_hcFin, i),
 					GetCount(_hcNfe, i), GetCount(_hcOth, i), GetCount(_hcAsj, i), GetCount(_hcSas, i),
-                    _hasFailedFilters)
+				    hasFailedFilters)
 					);
 			}
 			return gnomadItemsList;
@@ -194,20 +196,16 @@ namespace SAUtils.InputFileParsers
 		/// <param name="infoFields"></param>
 		private void ParseInfoField(string infoFields)
 		{
-			if (infoFields == "" || infoFields == ".") return;
+		    if (infoFields == "" || infoFields == ".") return;
+		    var infoItems = infoFields.OptimizedSplit(';');
 
-			var infoItems = infoFields.Split(';');
-			foreach (var infoItem in infoItems)
-			{
-				var infoKeyValue = infoItem.Split('=');
-				if (infoKeyValue.Length == 2)//sanity check
-				{
-					var key = infoKeyValue[0];
-					var value = infoKeyValue[1];
+		    foreach (string infoItem in infoItems)
+		    {
+		        (string key, string value) = infoItem.OptimizedKeyValue();
 
-					SetInfoField(key, value);
-				}
-			}
+		        // sanity check
+		        if (value != null) SetInfoField(key, value);
+		    }
 		}
 
 		/// <summary>
@@ -220,111 +218,111 @@ namespace SAUtils.InputFileParsers
 			switch (vcfId)
 			{
 				case "AC":
-					_acAll = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+					_acAll = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_AFR":
-					_acAfr = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_afr":
+					_acAfr = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_AMR":
-					_acAmr = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_amr":
+					_acAmr = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_EAS":
-					_acEas = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_eas":
+					_acEas = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_FIN":
-					_acFin = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_fin":
+					_acFin = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_NFE":
-					_acNfe = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_nfe":
+					_acNfe = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_OTH":
-					_acOth = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_oth":
+					_acOth = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-				case "AC_ASJ":
-					_acAsj = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+				case "AC_asj":
+					_acAsj = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 					break;
 
-			    case "AC_SAS":
-			        _acSas = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "AC_sas":
+			        _acSas = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
 			        break;
 
                 case "AN":
 			        _anAll = Convert.ToInt32(value);
 			        break;
 
-				case "AN_AFR":
+				case "AN_afr":
 					_anAfr = Convert.ToInt32(value);
 					break;
 
-				case "AN_AMR":
+				case "AN_amr":
 					_anAmr = Convert.ToInt32(value);
 					break;
 
-				case "AN_EAS":
+				case "AN_eas":
 					_anEas = Convert.ToInt32(value);
 					break;
 
-				case "AN_FIN":
+				case "AN_fin":
 					_anFin = Convert.ToInt32(value);
 					break;
 
-				case "AN_NFE":
+				case "AN_nfe":
 					_anNfe = Convert.ToInt32(value);
 					break;
 
-				case "AN_OTH":
+				case "AN_oth":
 					_anOth = Convert.ToInt32(value);
 					break;
 
-				case "AN_ASJ":
+				case "AN_asj":
 					_anAsj = Convert.ToInt32(value);
 					break;
 
-			    case "AN_SAS":
+			    case "AN_sas":
 			        _anSas = Convert.ToInt32(value);
 			        break;
 
-			    case "Hom":
-			        _hcAll = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt":
+			        _hcAll = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_AFR":
-			        _hcAfr = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_afr":
+			        _hcAfr = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_AMR":
-			        _hcAmr = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_amr":
+			        _hcAmr = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_EAS":
-			        _hcEas = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_eas":
+			        _hcEas = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_FIN":
-			        _hcFin = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_fin":
+			        _hcFin = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_NFE":
-			        _hcNfe = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_nfe":
+			        _hcNfe = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_OTH":
-			        _hcOth = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_oth":
+			        _hcOth = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_ASJ":
-			        _hcAsj = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_asj":
+			        _hcAsj = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
-			    case "Hom_SAS":
-			        _hcSas = value.Split(',').Select(val => Convert.ToInt32(val)).ToArray();
+			    case "nhomalt_sas":
+			        _hcSas = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).ToArray();
                     break;
 
                 case "DP":

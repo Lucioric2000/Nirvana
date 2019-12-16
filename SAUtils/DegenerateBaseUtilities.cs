@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 
 namespace SAUtils
 {
-    public class DegenerateBaseUtilities
+    public static class DegenerateBaseUtilities
     {
-        public static readonly Dictionary<char, List<char>> DegenerateBaseNotation = new Dictionary<char, List<char>>
+        private static readonly Dictionary<char, List<char>> DegenerateBaseNotation = new Dictionary<char, List<char>>
         {
             {'B', new List<char>{'C','G','T'}},
             {'D', new List<char>{'A','G','T'}},
@@ -19,12 +18,6 @@ namespace SAUtils
             {'Y', new List<char>{'C','T'}}
         };
 
-        public static readonly HashSet<char> BasicBases = new HashSet<char> {'A','C','G','T','N'};
-
-        public static bool HasDegenerateBase(string sequence) =>
-            sequence.ToUpper().Any(x => DegenerateBaseNotation.ContainsKey(x)) && 
-            sequence.ToUpper().All(x => BasicBases.Contains(x) || DegenerateBaseNotation.ContainsKey(x));
-
         public static List<string> GetAllPossibleSequences(string sequenceWithDegenerateBases)
         {
             var sequences = new List<string>();
@@ -32,7 +25,7 @@ namespace SAUtils
             return sequences;
         }
 
-        private static void GetSequences(string inputSequence, List<string> outputSequences, int index, string subSequence)
+        private static void GetSequences(string inputSequence, ICollection<string> outputSequences, int index, string subSequence)
         {
             if (index == inputSequence.Length)
             {

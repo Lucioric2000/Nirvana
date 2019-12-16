@@ -1,12 +1,11 @@
 ﻿using System;
-using CommonUtilities;
-using VariantAnnotation.Algorithms;
+using Genome;
+using Intervals;
+using OptimizedCore;
 using VariantAnnotation.AnnotatedPositions.Transcript;
+using VariantAnnotation.Caches.Utilities;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.Utilities;
+using Variants;
 
 namespace VariantAnnotation.AnnotatedPositions
 {
@@ -139,32 +138,69 @@ namespace VariantAnnotation.AnnotatedPositions
 
         public static PositionOffset GetCdnaPositionOffset(ITranscript transcript, int position, int regionIndex)
         {
+            
             if (!transcript.Overlaps(position, position)) return null;
 
             var region            = transcript.TranscriptRegions[regionIndex];
             int codingRegionStart = transcript.Translation?.CodingRegion.CdnaStart ?? -1;
             int codingRegionEnd   = transcript.Translation?.CodingRegion.CdnaEnd ?? -1;
-
-            var po = GetPositionAndOffset(position, region, transcript.Gene.OnReverseStrand);
+            var po = GetPositionAndOffset(position, region, transcript.RnaEdits, transcript.Gene.OnReverseStrand);
             if (po.Position == -1) return null;
 
             var cdnaCoord = GetCdnaCoord(po.Position, po.Offset, codingRegionStart, codingRegionEnd);
-            var value     = cdnaCoord.HasNoPosition ? "*" + po.Offset : cdnaCoord.CdnaCoord + (po.Offset == 0 ? "" : po.Offset.ToString("+0;-0;+0"));
+            string offset = po.Offset == 0 ? "" : po.Offset.ToString("+0;-0;+0");
+            string value  = cdnaCoord.HasNoPosition ? "*" + po.Offset : cdnaCoord.CdnaCoord + offset;
 
             return new PositionOffset(po.Position, po.Offset, value, cdnaCoord.HasStopCodonNotation);
         }
 
-        private static (int Position, int Offset) GetPositionAndOffset(int position, ITranscriptRegion region,
-            bool onReverseStrand)
+        private static (int Position, int Offset) GetPositionAndOffset(int position, ITranscriptRegion region, IRnaEdit[] rnaEdits, bool onReverseStrand)
         {
-            if (region.Type == TranscriptRegionType.Exon)
+            int cdsPos = -1;
+            int offset = -1;
+            switch (region.Type)
             {
-                return (region.CdnaStart + (onReverseStrand ? region.End - position : position - region.Start), 0);
+                case TranscriptRegionType.Exon:
+                    cdsPos = region.CdnaStart + (onReverseStrand ? region.End - position : position - region.Start);
+                    offset = 0;
+                    break;
+                case TranscriptRegionType.Gap:
+                    (cdsPos, offset) = GetGapPositionAndOffset(position, region, onReverseStrand);
+                    break;
+                case TranscriptRegionType.Intron:
+                    (cdsPos, offset) = GetIntronPositionAndOffset(position, region, onReverseStrand);
+                    break;
             }
 
-            return region.Type == TranscriptRegionType.Gap
-                ? GetGapPositionAndOffset(position, region, onReverseStrand)
-                : GetIntronPositionAndOffset(position, region, onReverseStrand);
+            var rnaEditOffset = GetRnaEditOffset(cdsPos, rnaEdits);
+            cdsPos -= rnaEditOffset;
+            return (cdsPos, offset);
+            
+        }
+
+        private static int GetRnaEditOffset(int position, IRnaEdit[] rnaEdits)
+        {
+            var rnaEditOffset = 0;
+            if (rnaEdits == null) return rnaEditOffset;
+
+            RnaEditUtilities.SetTypesAndSort(rnaEdits);
+
+            foreach (var rnaEdit in rnaEdits)
+            {
+                if (rnaEdit.Start > position) break;
+                
+                switch (rnaEdit.Type)
+                {
+                    case VariantType.insertion:
+                        rnaEditOffset += rnaEdit.Bases.Length;
+                        break;
+                    case VariantType.deletion:
+                        rnaEditOffset -= rnaEdit.End - rnaEdit.Start + 1;
+                        break;
+                }
+            }
+
+            return rnaEditOffset;
         }
 
         private static (int Position, int Offset) GetIntronPositionAndOffset(int position, ITranscriptRegion region,
@@ -250,6 +286,7 @@ namespace VariantAnnotation.AnnotatedPositions
 
             // format rest of string according to type
             // note: inversion and multiple are never assigned as genomic changes
+            // ReSharper disable once SwitchStatementMissingSomeCases
             switch (type)
             {
                 case GenomicChange.Deletion:
@@ -265,8 +302,8 @@ namespace VariantAnnotation.AnnotatedPositions
                     sb.Append(start + referenceBases + '>' + alternateBases);
                     break;
                 case GenomicChange.DelIns:
-                    sb.Append(coordinates + "del" + referenceBases + "ins" + alternateBases); //TODO: change to delins, now use del--ins-- to reduce anavarin differences
-                    //sb.Append(coordinates + "delins" + alternateBases);
+                    // NOTE: change to delins, now use del--ins-- to reduce anavarin differences
+                    sb.Append(coordinates + "del" + referenceBases + "ins" + alternateBases); 
                     break;
                 case GenomicChange.Insertion:
                     sb.Append(coordinates + "ins" + alternateBases);

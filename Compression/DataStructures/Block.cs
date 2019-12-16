@@ -8,8 +8,6 @@ namespace Compression.DataStructures
 {
     public sealed class Block
     {
-        #region members
-
         private readonly ICompressionAlgorithm _compressionAlgorithm;
         private readonly BlockHeader _header;
 
@@ -23,32 +21,21 @@ namespace Compression.DataStructures
         private readonly int _size;
         private readonly int _compressedBlockSize;
 
-        public bool IsFull => Offset == _size;
+        public bool IsFull      => Offset == _size;
         public bool HasMoreData => Offset < _header.NumUncompressedBytes;
 
-        #endregion
-
-        /// <summary>
-        /// constructor
-        /// </summary>
-        public Block(ICompressionAlgorithm compressionAlgorithm,int size=DefaultSize)
+        public Block(ICompressionAlgorithm compressionAlgorithm, int size = DefaultSize)
         {
             _compressionAlgorithm = compressionAlgorithm;
-            Offset = 0;
-	        _size = size;
+            Offset                = 0;
+            _size                 = size;
+
             _uncompressedBlock   = new byte[_size];
             _compressedBlockSize = compressionAlgorithm.GetCompressedBufferBounds(_size);
             _compressedBlock     = new byte[_compressedBlockSize];
-            
-            _header = new BlockHeader();
+            _header              = new BlockHeader();
         }
 
-        /// <summary>
-        /// Copies bytes from the specified byte array to the underlying uncompressed buffer.
-        /// </summary>
-        /// <param name="array">The buffer that contains the data.</param>
-        /// <param name="offset">The byte offset in <paramref name="array"/> from which the bytes will be read.</param>
-        /// <param name="count">The maximum number of bytes to copy.</param>
         public int CopyTo(byte[] array, int offset, int count)
         {
             int copyLength = Math.Min(_size - Offset, count);
@@ -60,12 +47,6 @@ namespace Compression.DataStructures
             return copyLength;
         }
 
-        /// <summary>
-        /// Copies bytes from the underlying uncompressed buffer to the specified byte array. 
-        /// </summary>
-        /// <param name="array">The buffer that contains the data.</param>
-        /// <param name="offset">The byte offset in <paramref name="array"/> from which the bytes will be read.</param>
-        /// <param name="count">The maximum number of bytes to copy.</param>
         public int CopyFrom(byte[] array, int offset, int count)
         {
             int copyLength = Math.Min(_header.NumUncompressedBytes - Offset, count);
@@ -77,10 +58,6 @@ namespace Compression.DataStructures
             return copyLength;
         }
 
-        /// <summary>
-        /// Writes the current compression block to a stream.
-        /// </summary>
-        /// <param name="stream">The stream that will write the compressed data.</param>
         public void Write(Stream stream)
         {
             _header.NumUncompressedBytes = Offset;
@@ -103,27 +80,18 @@ namespace Compression.DataStructures
             Offset = 0;
         }
 
-        /// <summary>
-        /// Writes the EOF header to a stream.
-        /// </summary>
-        /// <param name="stream">The stream that will write the compressed data.</param>
         public void WriteEof(Stream stream)
         {
             _header.NumUncompressedBytes = -1;
-            _header.NumCompressedBytes = -1;
+            _header.NumCompressedBytes   = -1;
             _header.Write(stream);
         }
 
-        /// <summary>
-        /// Reads the next compression block from the stream.
-        /// </summary>
-        /// <param name="stream">The stream that will read the compressed data.</param>
         public int Read(Stream stream)
         {
             FileOffset = stream.Position;
 
             _header.Read(stream);
-
             if (_header.IsEmpty) return -1;
 
             int numBytesRead = _header.NumCompressedBytes == -1

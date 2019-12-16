@@ -1,4 +1,4 @@
-﻿using VariantAnnotation.Interface.Intervals;
+﻿using Variants;
 
 namespace VariantAnnotation.Interface.Positions
 {

@@ -1,5 +1,6 @@
 ﻿using System;
-using CommonUtilities;
+using IO;
+using OptimizedCore;
 using SAUtils.InputFileParsers;
 using UnitTests.TestUtilities;
 using VariantAnnotation.Providers;
@@ -7,16 +8,14 @@ using Xunit;
 
 namespace UnitTests.SAUtils.InputFileParsers
 {
-	public class DataSourceVersionTests
+	public sealed class DataSourceVersionTests
 	{
 		[Fact]
 		public void ReadDataVersionFromFile()
 		{
-		    var versionFile = ResourceUtilities.GetReadStream(Resources.TopPath("dbSNP.version"));
-
-		    DataSourceVersion version;
-		    using (var reader = new DataSourceVersionReader(versionFile))
-		    {
+            DataSourceVersion version;
+            using (var reader = new DataSourceVersionReader(FileUtilities.GetReadStream(Resources.TopPath("dbSNP.version"))))
+            {
                 version = reader.GetVersion();
             }
 

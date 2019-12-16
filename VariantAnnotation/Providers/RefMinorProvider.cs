@@ -1,39 +1,24 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
+using Genome;
 using VariantAnnotation.Interface.Providers;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.SA;
-using VariantAnnotation.Utilities;
+using VariantAnnotation.NSA;
 
 namespace VariantAnnotation.Providers
 {
     public sealed class RefMinorProvider : IRefMinorProvider
     {
-        private readonly Dictionary<string, Dictionary<int, string>> _positionDict = new Dictionary<string, Dictionary<int, string>>();
+        private readonly RefMinorDbReader _reader;
 
-        public RefMinorProvider(List<string> supplementaryAnnotationDirectories)
+        public RefMinorProvider(Stream dbStream, Stream indexStream)
         {
-            foreach (var directory in supplementaryAnnotationDirectories)
-            {
-                foreach (var file in Directory.GetFiles(directory, "*.idx"))
-                {
-                    var chromeName = Path.GetFileNameWithoutExtension(file).Split('.')[0];
-                    var refMinorPostions = SaIndex.Read(FileUtilities.GetReadStream(file)).GlobalMajorAlleleForRefMinor;
-                    if (refMinorPostions.Length > 0) _positionDict[chromeName] = refMinorPostions.ToDictionary(x => x.Position, x => x.GlobalMajorAllele);
-
-                }
-            }
+            _reader = new RefMinorDbReader(dbStream, indexStream);
         }
 
-        public bool IsReferenceMinor(IChromosome chromosome, int pos)
-        {
-            return _positionDict.ContainsKey(chromosome.UcscName) && _positionDict[chromosome.UcscName].ContainsKey(pos);
-        }
+        public string GetGlobalMajorAllele(IChromosome chromosome, int pos) => _reader.GetGlobalMajorAllele(chromosome, pos);
 
-        public string GetGlobalMajorAlleleForRefMinor(IChromosome chromosome, int pos)
+        public void Dispose()
         {
-            return !IsReferenceMinor(chromosome, pos) ? null : _positionDict[chromosome.UcscName][pos];
+            _reader?.Dispose();
         }
     }
 }

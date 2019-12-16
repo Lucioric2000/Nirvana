@@ -1,5 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using Genome;
+using Intervals;
 using VariantAnnotation.Algorithms;
 using VariantAnnotation.AnnotatedPositions;
 using VariantAnnotation.AnnotatedPositions.Consequence;
@@ -7,9 +8,7 @@ using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
+using Variants;
 
 namespace VariantAnnotation.TranscriptAnnotation
 {
@@ -21,7 +20,6 @@ namespace VariantAnnotation.TranscriptAnnotation
             var rightShiftedVariant = VariantRotator.Right(leftShiftedVariant, transcript, refSequence,
                 transcript.Gene.OnReverseStrand);
 
-            
             var leftAnnotation = AnnotateTranscript(transcript, leftShiftedVariant, aminoAcids, refSequence);
 
             var rightAnnotation = ReferenceEquals(leftShiftedVariant, rightShiftedVariant)
@@ -30,6 +28,7 @@ namespace VariantAnnotation.TranscriptAnnotation
 
             var consequences = GetConsequences(transcript, leftShiftedVariant, leftAnnotation.VariantEffect);
 
+            
             var hgvsCoding = HgvsCodingNomenclature.GetHgvscAnnotation(transcript, rightShiftedVariant, refSequence,
                     rightAnnotation.Position.RegionStartIndex, rightAnnotation.Position.RegionEndIndex);
 
@@ -43,12 +42,11 @@ namespace VariantAnnotation.TranscriptAnnotation
 
             return new AnnotatedTranscript(transcript, leftAnnotation.RefAminoAcids, leftAnnotation.AltAminoAcids,
                 leftAnnotation.RefCodons, leftAnnotation.AltCodons, leftAnnotation.Position, hgvsCoding, hgvsProtein,
-                predictionScores.Sift, predictionScores.PolyPhen, consequences, null);
+                predictionScores.Sift, predictionScores.PolyPhen, consequences, null, false);
         }
 
-        internal static (VariantEffect VariantEffect, IMappedPosition Position, string RefAminoAcids, string
-            AltAminoAcids, string RefCodons, string AltCodons, string TranscriptAltAllele) AnnotateTranscript(ITranscript transcript, ISimpleVariant variant, AminoAcids aminoAcids,
-                ISequence refSequence)
+        private static (VariantEffect VariantEffect, IMappedPosition Position, string RefAminoAcids, string
+            AltAminoAcids, string RefCodons, string AltCodons, string TranscriptAltAllele) AnnotateTranscript(ITranscript transcript, ISimpleVariant variant, AminoAcids aminoAcids, ISequence refSequence)
         {
             var onReverseStrand = transcript.Gene.OnReverseStrand;
             var start = MappedPositionUtilities.FindRegion(transcript.TranscriptRegions, variant.Start);
@@ -58,33 +56,49 @@ namespace VariantAnnotation.TranscriptAnnotation
                 end.Index, variant, onReverseStrand, transcript.Translation?.CodingRegion, transcript.StartExonPhase,
                 variant.Type == VariantType.insertion);
 
-            var transcriptRefAllele = HgvsUtilities.GetTranscriptAllele(variant.RefAllele, onReverseStrand);
             var transcriptAltAllele = HgvsUtilities.GetTranscriptAllele(variant.AltAllele, onReverseStrand);
+            var codingSequence = GetCodingSequence(transcript, refSequence);
 
-            var codingSequence = transcript.Translation == null
-                ? null
-                : new CodingSequence(refSequence, transcript.Translation.CodingRegion, transcript.TranscriptRegions,
-                    transcript.Gene.OnReverseStrand, transcript.StartExonPhase);
-
-            var codons = Codons.GetCodons(transcriptRefAllele, transcriptAltAllele, position.CdsStart, position.CdsEnd,
+            var codons = Codons.GetCodons(transcriptAltAllele, position.CdsStart, position.CdsEnd,
                 position.ProteinStart, position.ProteinEnd, codingSequence);
-
+            
             var coveredCdna = transcript.TranscriptRegions.GetCoveredCdnaPositions(position.CdnaStart, start.Index,
                 position.CdnaEnd, end.Index, onReverseStrand);
 
-            var coveredCds = MappedPositionUtilities.GetCoveredCdsPositions(coveredCdna.Start, coveredCdna.End,
-                transcript.StartExonPhase, transcript.Translation?.CodingRegion);
-
             var aa = aminoAcids.Translate(codons.Reference, codons.Alternate);
 
+            var coveredPositions = MappedPositionUtilities.GetCoveredCdsAndProteinPositions(coveredCdna.Start, coveredCdna.End,
+                transcript.StartExonPhase, transcript.Translation?.CodingRegion);
+
+            // only generate the covered version of ref & alt alleles when CDS start/end is -1
+            var coveredAa = position.CdsStart == -1 || position.CdsEnd == -1
+                ? GetCoveredAa(aminoAcids, transcriptAltAllele, coveredPositions, codingSequence)
+                : aa;
+
             var positionalEffect = GetPositionalEffect(transcript, variant, position, aa.Reference, aa.Alternate,
-                coveredCdna.Start, coveredCdna.End, coveredCds.Start, coveredCds.End);
+                coveredCdna.Start, coveredCdna.End, coveredPositions.CdsStart, coveredPositions.CdsEnd);
 
             var variantEffect = new VariantEffect(positionalEffect, variant, transcript, aa.Reference, aa.Alternate,
-                codons.Reference, codons.Alternate, position.ProteinStart);
+                codons.Reference, codons.Alternate, position.ProteinStart, coveredAa.Reference, coveredAa.Alternate);
 
             return (variantEffect, position, aa.Reference, aa.Alternate, codons.Reference, codons.Alternate,
                 transcriptAltAllele);
+        }
+
+        private static (string Reference, string Alternate) GetCoveredAa(AminoAcids aminoAcids, string transcriptAltAllele, (int CdsStart, int CdsEnd, int ProteinStart, int ProteinEnd) coveredPositions, ISequence codingSequence)
+        {
+            (string reference, string alternate) = Codons.GetCodons(transcriptAltAllele, coveredPositions.CdsStart,
+                coveredPositions.CdsEnd, coveredPositions.ProteinStart, coveredPositions.ProteinEnd, codingSequence);
+            return aminoAcids.Translate(reference, alternate);
+        }
+
+        private static ISequence GetCodingSequence(ITranscript transcript, ISequence refSequence)
+        {
+            if (transcript.Translation == null) return null;
+
+            return transcript.CodingSequence ?? (transcript.CodingSequence = new CodingSequence(refSequence,
+                       transcript.Translation.CodingRegion, transcript.TranscriptRegions,
+                       transcript.Gene.OnReverseStrand, transcript.StartExonPhase, transcript.RnaEdits));
         }
 
         private static IMappedPosition GetMappedPosition(ITranscriptRegion[] regions, ITranscriptRegion startRegion,
@@ -121,8 +135,8 @@ namespace VariantAnnotation.TranscriptAnnotation
             return positionalEffect;
         }
 
-        private static List<ConsequenceTag> GetConsequences(ITranscript transcript, IVariant variant,
-            VariantEffect variantEffect)
+        private static List<ConsequenceTag> GetConsequences(IInterval transcript, IVariant variant,
+            IVariantEffect variantEffect)
         {
             var featureEffect = new FeatureVariantEffects(transcript, variant.Type, variant,
                 variant.Behavior.StructuralVariantConsequence);

@@ -1,9 +1,10 @@
-﻿using VariantAnnotation.Interface.Providers;
+﻿using System;
+using VariantAnnotation.Interface.Providers;
 
 namespace VariantAnnotation.Interface.GeneAnnotation
 {
-    public interface IGeneAnnotationProvider:IProvider
+    public interface IGeneAnnotationProvider:IProvider, IDisposable
     {
-        IAnnotatedGene Annotate(string geneName);
+        string Annotate(string geneName);
     }
 }

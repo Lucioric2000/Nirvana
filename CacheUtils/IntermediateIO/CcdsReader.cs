@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using IO;
+using OptimizedCore;
 using VariantAnnotation.Utilities;
 
 namespace CacheUtils.IntermediateIO
@@ -13,18 +15,18 @@ namespace CacheUtils.IntermediateIO
         {
             var ccdsIdToEnsemblId = new Dictionary<string, List<string>>();
 
-            using (var reader = new StreamReader(FileUtilities.GetReadStream(ccdsPath)))
+            using (var reader = FileUtilities.GetStreamReader(FileUtilities.GetReadStream(ccdsPath)))
             {
                 while (true)
                 {
-                    var line = reader.ReadLine();
+                    string line = reader.ReadLine();
                     if (line == null) break;
-                    if (line.StartsWith("#")) continue;
+                    if (line.OptimizedStartsWith('#')) continue;
 
-                    var cols = line.Split('\t');
+                    var cols = line.OptimizedSplit('\t');
                     if (cols.Length != 8) throw new InvalidDataException($"Expected 8 columns, but found {cols.Length}: [{line}]");
 
-                    var nucleotideId = cols[NucleotideIdIndex];
+                    string nucleotideId = cols[NucleotideIdIndex];
                     if (!nucleotideId.StartsWith("ENST")) continue;
 
                     var ccds    = FormatUtilities.SplitVersion(cols[CcdsIdIndex]);

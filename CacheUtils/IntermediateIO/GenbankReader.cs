@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using CacheUtils.Genbank;
-using VariantAnnotation.Interface.Intervals;
+using Intervals;
+using IO;
+using OptimizedCore;
 
 namespace CacheUtils.IntermediateIO
 {
@@ -12,7 +14,7 @@ namespace CacheUtils.IntermediateIO
 
         internal GenbankReader(Stream stream)
         {
-            _reader = new StreamReader(stream);
+            _reader = FileUtilities.GetStreamReader(stream);
             IntermediateIoCommon.ReadHeader(_reader, IntermediateIoCommon.FileType.Genbank);
         }
 
@@ -49,7 +51,7 @@ namespace CacheUtils.IntermediateIO
             string line = _reader.ReadLine();
             if (line == null) throw new InvalidOperationException("Unexpected null line when parsing exons");
 
-            var cols = line.Split('\t');
+            var cols = line.OptimizedSplit('\t');
             if (cols[0] != "Exons") throw new InvalidDataException($"Expected the first keyword to be Exons, but found something different: {line}");
 
             var exons = new IInterval[numExons];
@@ -68,7 +70,7 @@ namespace CacheUtils.IntermediateIO
         private static (string TranscriptId, byte TranscriptVersion, string ProteinId, byte ProteinVersion, string
             GeneId, string GeneSymbol, IInterval CodingRegion, int NumExons) ReadTranscriptInfo(string line)
         {
-            var cols = line.Split('\t');
+            var cols = line.OptimizedSplit('\t');
             if (cols.Length != 9) throw new InvalidDataException($"Expected 9 columns, but found {cols.Length} columns instead.");
 
             string transcriptId    = cols[0];

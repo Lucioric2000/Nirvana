@@ -1,40 +1,60 @@
 ﻿using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Genome;
+using OptimizedCore;
 using VariantAnnotation.Interface.GeneAnnotation;
 using VariantAnnotation.Interface.Providers;
-using VariantAnnotation.Interface.Sequence;
+using VariantAnnotation.IO;
+using VariantAnnotation.NSA;
 
 namespace VariantAnnotation.GeneAnnotation
 {
-    public sealed class GeneAnnotationProvider:IGeneAnnotationProvider
+    public sealed class GeneAnnotationProvider : IGeneAnnotationProvider
     {
 	    public string Name { get; }
-	    public GenomeAssembly GenomeAssembly { get; }
-        public IEnumerable<IDataSourceVersion> DataSourceVersions { get; }
+        public GenomeAssembly Assembly => GenomeAssembly.Unknown;
+        public IEnumerable<IDataSourceVersion> DataSourceVersions => _ngaReaders.Select(x => x.Version);
 
-        private readonly Dictionary<string, IAnnotatedGene> _geneAnnotationDict;
+        private readonly List<NgaReader> _ngaReaders;
 
-        public IAnnotatedGene Annotate(string geneName)
+        public string Annotate(string geneName)
         {
-            return !_geneAnnotationDict.ContainsKey(geneName) ? null : _geneAnnotationDict[geneName];
-        }
+            var sb = StringBuilderCache.Acquire();
+            var jsonObject = new JsonObject(sb);
 
-        public GeneAnnotationProvider(GeneDatabaseReader geneDatabaseReader)
-        {
-	        Name = "Gene annotation provider";
-            DataSourceVersions = geneDatabaseReader.DataSourceVersions;
-            _geneAnnotationDict = new Dictionary<string, IAnnotatedGene>();
-            CreateGeneMapDict(geneDatabaseReader);
-        }
+            sb.Append(JsonObject.OpenBrace);
+            jsonObject.AddStringValue("name", geneName);
 
-        private void CreateGeneMapDict(GeneDatabaseReader geneDatabaseReader)
-        {
-            foreach (var geneAnnotation in geneDatabaseReader.Read())
+            bool hasAnnotation = false;
+            foreach (NgaReader ngaReader in _ngaReaders)
             {
-                if (!_geneAnnotationDict.ContainsKey(geneAnnotation.GeneName))
-                
-                    _geneAnnotationDict[geneAnnotation.GeneName] = geneAnnotation;
-                
+                var jsonString = ngaReader.GetAnnotation(geneName);
+                jsonObject.AddStringValue(ngaReader.JsonKey, jsonString, false);
+                if (!string.IsNullOrEmpty(jsonString)) hasAnnotation = true;
             }
+
+            if (!hasAnnotation) return null;
+
+            sb.Append(JsonObject.CloseBrace);
+
+            return StringBuilderCache.GetStringAndRelease(sb);
+        }
+
+        public GeneAnnotationProvider(IEnumerable<Stream> dbStreams)
+        {
+            Name        = "Gene annotation provider";
+            _ngaReaders = new List<NgaReader>();
+            foreach (var dbStream in dbStreams) _ngaReaders.Add(new NgaReader(dbStream));
+        }
+
+        public void Dispose()
+        {
+            if(_ngaReaders != null)
+                foreach (var ngaReader in _ngaReaders)
+                {
+                    ngaReader.Dispose();
+                }
         }
     }
 }

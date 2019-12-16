@@ -1,122 +1,46 @@
 ﻿using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
-using CommonUtilities;
-using VariantAnnotation.Interface.IO;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.IO;
+using ErrorHandling.Exceptions;
+using Genome;
+using SAUtils.Schema;
+using VariantAnnotation.Interface.SA;
+using VariantAnnotation.Utilities;
 
 namespace SAUtils.DataStructures
 {
-    public sealed class CustomItem : SupplementaryDataItem, IJsonSerializer
+    public sealed class CustomItem : ISupplementaryDataItem
     {
-		public string Id { get; }
-		public string AnnotationType { get; }
-        private string IsAlleleSpecific { get; }
-		public Dictionary<string, string> StringFields { get; }
-        private Dictionary<string, double> NumberFields { get; }
+        public IChromosome Chromosome { get; }
+        public int Position { get; set; }
+        public string RefAllele { get; set; }
+        public string AltAllele { get; set; }
 
-		public List<string> BooleanFields { get; }
+        private readonly string[][] _values;
+        private readonly SaJsonSchema _jsonSchema;
+        private readonly string _inputLine;
 
-
-        public CustomItem(IChromosome chromosome, int start, string referenceAllele, string alternateAllele, string annotationType, string id, Dictionary<string, string> stringFields, Dictionary<string, double> numberFields,  List<string> boolFields, string isAlleleSpecific=null)
+        public CustomItem(IChromosome chromosome, int start, string refAllele, string altAllele, string[][] values, SaJsonSchema jsonSchema, string inputLine)
         {
-            Chromosome       = chromosome;
-            Start            = start;
-            ReferenceAllele  = referenceAllele;
-            AlternateAllele  = alternateAllele;
-            AnnotationType   = annotationType;
-            Id               = id;
-            StringFields     = stringFields;
-            NumberFields     = numberFields;
-            BooleanFields    = boolFields;
-            IsAlleleSpecific = isAlleleSpecific;
-        }
-
-        public override bool Equals(object other)
-		{
-		    if (!(other is CustomItem otherItem)) return false;
-
-			return Chromosome.Equals(otherItem.Chromosome)
-				   && Start.Equals(otherItem.Start)
-				   && ReferenceAllele.Equals(otherItem.ReferenceAllele)
-				   && AlternateAllele.Equals(otherItem.AlternateAllele)
-				   && AnnotationType.Equals(otherItem.AnnotationType);
-		}
-
-		public override int GetHashCode()
-		{
-            // ReSharper disable NonReadonlyMemberInGetHashCode
-            var hashCode = Start.GetHashCode() ^ Chromosome.GetHashCode();
-            hashCode = (hashCode * 397) ^ (AlternateAllele?.GetHashCode() ?? 0);
-            hashCode = (hashCode * 397) ^ (AnnotationType?.GetHashCode() ?? 0);
-            // ReSharper restore NonReadonlyMemberInGetHashCode
-
-            return hashCode;
+            Chromosome = chromosome;
+            Position = start;
+            RefAllele = refAllele;
+            AltAllele = altAllele;
+            _values = values;
+            _jsonSchema = jsonSchema;
+            _inputLine = inputLine;
         }
 
         public string GetJsonString()
-	    {
-			var sb = StringBuilderCache.Acquire();
-			var jsonObject = new JsonObject(sb);
-
-			jsonObject.AddStringValue("id", Id);
-			jsonObject.AddStringValue("altAllele", "N" == AlternateAllele ? null : AlternateAllele);
-			jsonObject.AddStringValue("isAlleleSpecific", IsAlleleSpecific, false);
-
-			if (StringFields != null)
-				foreach (var stringField in StringFields)
-				{
-					jsonObject.AddStringValue(stringField.Key, stringField.Value);
-				}
-
-			if (NumberFields != null)
-				foreach (var numFields in NumberFields)
-				{
-					jsonObject.AddStringValue(numFields.Key, numFields.Value.ToString(CultureInfo.InvariantCulture), false);
-				}
-
-			if (BooleanFields != null)
-				foreach (var booleanField in BooleanFields)
-				{
-					jsonObject.AddBoolValue(booleanField, true);
-				}
-
-	        return StringBuilderCache.GetStringAndRelease(sb);
-	    }
-
-		public void SerializeJson(StringBuilder sb)
-		{
-			var jsonObject = new JsonObject(sb);
-
-			sb.Append(JsonObject.OpenBrace);
-			jsonObject.AddStringValue("id", Id);
-			jsonObject.AddStringValue("altAllele", "N" == AlternateAllele ? null : AlternateAllele);
-			jsonObject.AddStringValue("isAlleleSpecific", IsAlleleSpecific, false);
-
-			if (StringFields != null)
-				foreach (var stringField in StringFields)
-				{
-					jsonObject.AddStringValue(stringField.Key, stringField.Value);
-				}
-
-			if (NumberFields != null)
-				foreach (var numFields in NumberFields)
-				{
-					jsonObject.AddStringValue(numFields.Key, numFields.Value.ToString(CultureInfo.InvariantCulture),false);
-				}
-
-			if (BooleanFields != null)
-				foreach (var booleanField in BooleanFields)
-				{
-					jsonObject.AddBoolValue(booleanField, true);
-				}
-			sb.Append(JsonObject.CloseBrace);
-		}
-		public override SupplementaryIntervalItem GetSupplementaryInterval()
-		{
-			throw new System.NotImplementedException();
-		}
-
-	}
+        {
+            var allValues = new List<string[]> {new []{BaseFormatting.EmptyToDash(RefAllele)}, new []{BaseFormatting.EmptyToDash(AltAllele)} };
+            allValues.AddRange(_values);
+            try
+            {
+                return _jsonSchema.GetJsonString(allValues);
+            }
+            catch (UserErrorException e)
+            {
+                throw new UserErrorException(e.Message + $"\nInput line: {_inputLine}");
+            }
+        }
+    }
 }

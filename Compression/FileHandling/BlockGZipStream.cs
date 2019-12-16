@@ -12,6 +12,11 @@ namespace Compression.FileHandling
     // | 31|139|  8|  4|              0|  0|255|      6| 66| 67|      2|BLK_LEN|
     // +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
 
+    // BGZF/GZIP footer:
+    // +---+---+---+---+---+---+---+---+
+    // |            CRC|     Source len|
+    // +---+---+---+---+---+---+---+---+
+
     public sealed class BlockGZipStream : Stream
     {
         private readonly byte[] _compressedBlock;
@@ -51,20 +56,11 @@ namespace Compression.FileHandling
             set => SeekVirtualFilePointer((ulong)value);
         }
 
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
+        public override void SetLength(long value) => throw new NotSupportedException();
 
-        public override void Flush()
-        {
-            _stream.Flush();
-        }
+        public override void Flush() => _stream.Flush();
 
         protected override void Dispose(bool disposing)
         {
@@ -96,17 +92,7 @@ namespace Compression.FileHandling
 
         #endregion
 
-        private BlockGZipStream(CompressionMode compressionMode, int compressionLevel)
-        {
-            _bgzf = new Zlib(compressionLevel);
-            _isCompressor = compressionMode == CompressionMode.Compress;
-
-            _uncompressedBlock = new byte[BlockGZipFormatCommon.MaxBlockSize];
-            _compressedBlock   = new byte[_bgzf.GetCompressedBufferBounds(BlockGZipFormatCommon.MaxBlockSize)];            
-        }
-
         public BlockGZipStream(Stream stream, CompressionMode compressionMode, bool leaveStreamOpen = false, int compressionLevel = 1)
-            : this(compressionMode, compressionLevel)
         {
             _filePath        = "(stream)";
             _leaveStreamOpen = leaveStreamOpen;
@@ -116,8 +102,13 @@ namespace Compression.FileHandling
             if (stream == null) throw new ArgumentNullException(nameof(stream));
 
             // sanity check: make sure we can use the stream for reading or writing
+            _isCompressor = compressionMode == CompressionMode.Compress;
             if (_isCompressor  && !_stream.CanWrite) throw new CompressionException("A stream lacking write capability was provided to the block GZip compressor.");
             if (!_isCompressor && !_stream.CanRead)  throw new CompressionException("A stream lacking read capability was provided to the block GZip decompressor.");
+
+            _bgzf              = new Zlib(compressionLevel);
+            _uncompressedBlock = new byte[BlockGZipFormatCommon.MaxBlockSize];
+            _compressedBlock   = new byte[_bgzf.GetCompressedBufferBounds(BlockGZipFormatCommon.MaxBlockSize)];
         }
 
         private void Flush(int uncompressedSize)
@@ -129,7 +120,7 @@ namespace Compression.FileHandling
 			_blockAddress = _stream.Position;	
         }
 
-        private static bool HasValidHeader(int numHeaderBytes, IReadOnlyList<byte> header)
+        public static bool HasValidHeader(int numHeaderBytes, IReadOnlyList<byte> header)
         {
             if (numHeaderBytes != BlockGZipFormatCommon.BlockHeaderLength) return false;
 
@@ -143,9 +134,8 @@ namespace Compression.FileHandling
 
         private void ReadBlock()
         {
-            var header = new byte[BlockGZipFormatCommon.BlockHeaderLength];
             long blockAddress = _stream.CanSeek ? _stream.Position : 0;
-            int count  = _stream.Read(header, 0, BlockGZipFormatCommon.BlockHeaderLength);
+            int count         = _stream.Read(_compressedBlock, 0, BlockGZipFormatCommon.BlockHeaderLength);
 
             // handle the case where no data was read
             if (count == 0)
@@ -155,15 +145,13 @@ namespace Compression.FileHandling
             }
 
             // check the header
-            if (!HasValidHeader(count, header))
+            if (!HasValidHeader(count, _compressedBlock))
             {
                 throw new CompressionException($"Found an invalid header when reading the GZip block ({_filePath})");
             }
 
-            int blockLength = BitConverter.ToUInt16(header, 16) + 1;
+            int blockLength = BitConverter.ToUInt16(_compressedBlock, 16) + 1;
             int remaining   = blockLength - BlockGZipFormatCommon.BlockHeaderLength;
-
-            Buffer.BlockCopy(header, 0, _compressedBlock, 0, BlockGZipFormatCommon.BlockHeaderLength);
 
             count = _stream.Read(_compressedBlock, BlockGZipFormatCommon.BlockHeaderLength, remaining);
 

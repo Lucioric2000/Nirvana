@@ -1,6 +1,6 @@
-﻿using Moq;
-using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
+﻿using Genome;
+using Moq;
+using Variants;
 using Vcf.VariantCreator;
 using Xunit;
 
@@ -13,13 +13,12 @@ namespace UnitTests.Vcf
         {
             var chrom = new Mock<IChromosome>();
             chrom.Setup(x => x.EnsemblName).Returns("1");
-	        var variant = SmallVariantCreator.Create(chrom.Object, 100, "A", "ACG", false, false);
+	        var variant = SmallVariantCreator.Create(chrom.Object, 100, "A", "ACG", false, false, null);
 			Assert.False(variant.IsRefMinor);
             Assert.True(variant.Behavior.NeedFlankingTranscript);
             Assert.True(variant.Behavior.NeedSaPosition);
             Assert.False(variant.Behavior.NeedSaInterval);
             Assert.False(variant.Behavior.ReducedTranscriptAnnotation);
-            Assert.False(variant.Behavior.ReportOverlappingGenes);
             Assert.False(variant.Behavior.StructuralVariantConsequence);
             Assert.Equal("1",variant.Chromosome.EnsemblName);
             Assert.Equal(101,variant.Start);
@@ -30,7 +29,6 @@ namespace UnitTests.Vcf
             Assert.False(variant.IsDecomposed);
             Assert.False(variant.IsRecomposed);
             Assert.Null(variant.LinkedVids);
-
         }
 
 
@@ -45,7 +43,7 @@ namespace UnitTests.Vcf
         {
             var chrom = new Mock<IChromosome>();
             chrom.Setup(x => x.EnsemblName).Returns("1");
-	        var variant = SmallVariantCreator.Create(chrom.Object, 100, refAllele, altAllele, false, false);
+	        var variant = SmallVariantCreator.Create(chrom.Object, 100, refAllele, altAllele, false, false, null);
 			Assert.Equal(expId, variant.VariantId);
         }
     }

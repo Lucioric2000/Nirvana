@@ -1,6 +1,7 @@
 ﻿using System;
+using OptimizedCore;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Positions;
+using Variants;
 
 namespace VariantAnnotation.AnnotatedPositions.Transcript
 {
@@ -24,6 +25,9 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
         private readonly int _referenceAminoAcidsLen;
         private readonly int _alternateAminoAcidsLen;
 
+        private readonly string _coveredReferenceAminoAcids;
+        private readonly string _coveredAlternateAminoAcids;
+
         private readonly string _referenceCodons;
         private readonly string _alternateCodons;
 
@@ -37,7 +41,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
 
         public VariantEffect(TranscriptPositionalEffect transcriptEffect, ISimpleVariant variant, ITranscript transcript,
             string referenAminoAcids, string alternateAminoAcids, string referenceCodons, string alternateCodons,
-            int? proteinBegin, VariantEffectCache cache = null)
+            int? proteinBegin, string coveredReferenceAminoAcids, string coveredAlternateAminoAcids, VariantEffectCache cache = null)
         {
             _transcript = transcript;
             _variant    = variant;
@@ -50,6 +54,10 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             _alternateAminoAcids    = alternateAminoAcids;
             _referenceAminoAcidsLen = _referenceAminoAcids?.Length ?? 0;
             _alternateAminoAcidsLen = _alternateAminoAcids?.Length ?? 0;
+
+            _coveredReferenceAminoAcids = coveredReferenceAminoAcids;
+            _coveredAlternateAminoAcids = coveredAlternateAminoAcids;
+
             _referenceCodons        = referenceCodons;
             _alternateCodons        = alternateCodons;
             _referenceCodonsLen     = _referenceCodons?.Length ?? 0;
@@ -245,7 +253,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             {
                 var stopPos = _alternateAminoAcids.IndexOf(AminoAcids.StopCodon, StringComparison.Ordinal);
                 var altAminoAcidesBeforeStop = _alternateAminoAcids.Substring(0, stopPos);
-                if (_alternateAminoAcids.StartsWith(AminoAcids.StopCodon) ||
+                if (_alternateAminoAcids.OptimizedStartsWith(AminoAcids.StopCodonChar) ||
                     _referenceAminoAcids.StartsWith(altAminoAcidesBeforeStop))
                     return true;
             }
@@ -358,7 +366,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             var result = true;
 
             var sameLen = _referenceAminoAcidsLen == _alternateAminoAcidsLen;
-            var startsWithTer = _referenceAminoAcids.StartsWith("X") || _alternateAminoAcids.StartsWith("X");
+            var startsWithTer = _referenceAminoAcids.OptimizedStartsWith('X') || _alternateAminoAcids.OptimizedStartsWith('X');
 
             var isInframeDeletion = IsInframeDeletion();
             // Note: sequence ontology says that stop retained should not be here (http://www.sequenceontology.org/browser/current_svn/term/SO:0001567)
@@ -422,9 +430,9 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             if (_cache.Contains(ct)) return _cache.Get(ct);
 
             bool result = false;
-            if (!string.IsNullOrEmpty(_referenceAminoAcids) && _alternateAminoAcids != null)
-                result = _referenceAminoAcids.Contains(AminoAcids.StopCodon) &&
-                         !_alternateAminoAcids.Contains(AminoAcids.StopCodon);
+            if (!string.IsNullOrEmpty(_coveredReferenceAminoAcids) && _coveredAlternateAminoAcids != null)
+                result = _coveredReferenceAminoAcids.Contains(AminoAcids.StopCodon) &&
+                         !_coveredAlternateAminoAcids.Contains(AminoAcids.StopCodon);
 
             _cache.Add(ct, result);
             return result;
@@ -529,7 +537,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             const ConsequenceTag ct = ConsequenceTag.non_coding_transcript_variant;
             if (_cache.Contains(ct)) return _cache.Get(ct);
 
-            // TODO: Isn't IsWithinTranscript always true? and not within mature miRNA is always true
+            // NOTE: Isn't IsWithinTranscript always true? and not within mature miRNA is always true
             // For Ensembl transcript, miRNA may be a valid attribute. We have their location and we would like to check if the variant overlaps with the miRNA
             var result = !_preCache.HasExonOverlap && _transcript.Translation == null && !_preCache.OverlapWithMicroRna;
 
@@ -549,7 +557,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
                      (string.IsNullOrEmpty(_transcript.Translation.PeptideSeq) ||
                       string.IsNullOrEmpty(_alternateAminoAcids) || _alternateAminoAcids.Contains("X"))
                      && !(IsFrameshiftVariant() || IsInframeDeletion() || IsIncompleteTerminalCodonVariant() ||
-                          IsProteinAlteringVariant() || IsStopGained() || IsStopRetained());
+                          IsProteinAlteringVariant() || IsStopGained() || IsStopRetained() || IsStopLost());
 
             _cache.Add(ct, result);
             return result;

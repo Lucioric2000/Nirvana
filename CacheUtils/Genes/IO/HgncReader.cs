@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using CacheUtils.Genes.DataStructures;
-using CommonUtilities;
-using VariantAnnotation.Interface.Sequence;
+using Genome;
+using IO;
+using OptimizedCore;
 
 namespace CacheUtils.Genes.IO
 {
@@ -21,7 +22,7 @@ namespace CacheUtils.Genes.IO
         public HgncReader(Stream stream, IDictionary<string, IChromosome> refNameToChromosome)
         {
             _refNameToChromosome = refNameToChromosome;
-            _reader = new StreamReader(stream);
+            _reader = FileUtilities.GetStreamReader(stream);
             _reader.ReadLine();
         }
 
@@ -33,7 +34,7 @@ namespace CacheUtils.Genes.IO
             string line = _reader.ReadLine();
             if (line == null) return null;
 
-            var cols = line.Split('\t');
+            var cols = line.OptimizedSplit('\t');
             if (cols.Length != 49) throw new InvalidDataException($"Expected 48 columns but found {cols.Length} when parsing the gene entry:[{line}]");
 
             try

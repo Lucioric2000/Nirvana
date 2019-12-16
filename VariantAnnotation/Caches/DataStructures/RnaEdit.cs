@@ -1,6 +1,6 @@
-﻿using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.IO;
-using VariantAnnotation.IO;
+﻿using IO;
+using VariantAnnotation.Interface.AnnotatedPositions;
+using Variants;
 
 namespace VariantAnnotation.Caches.DataStructures
 {
@@ -9,15 +9,17 @@ namespace VariantAnnotation.Caches.DataStructures
         public int Start { get; }
         public int End { get; }
         public string Bases { get; }
+        public VariantType Type { get; set; }
 
         public RnaEdit(int start, int end, string bases)
         {
             Start = start;
             End   = end;
             Bases = bases;
+            Type = VariantType.unknown;
         }
 
-        public static IRnaEdit Read(ExtendedBinaryReader reader)
+        public static IRnaEdit Read(BufferedBinaryReader reader)
         {
             int start    = reader.ReadOptInt32();
             int end      = reader.ReadOptInt32();
@@ -30,6 +32,11 @@ namespace VariantAnnotation.Caches.DataStructures
             writer.WriteOpt(Start);
             writer.WriteOpt(End);
             writer.WriteOptAscii(Bases);
+        }
+
+        public int CompareTo(IRnaEdit other)
+        {
+            return Start.CompareTo(other.Start);
         }
     }
 }

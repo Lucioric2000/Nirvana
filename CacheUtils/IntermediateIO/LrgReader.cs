@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using IO;
+using OptimizedCore;
 using VariantAnnotation.Utilities;
 
 namespace CacheUtils.IntermediateIO
@@ -14,15 +16,15 @@ namespace CacheUtils.IntermediateIO
         {
             var transcriptIds = new HashSet<string>();
 
-            using (var reader = new StreamReader(FileUtilities.GetReadStream(lrgPath)))
+            using (var reader = FileUtilities.GetStreamReader(FileUtilities.GetReadStream(lrgPath)))
             {
                 while (true)
                 {
-                    var line = reader.ReadLine();
+                    string line = reader.ReadLine();
                     if (line == null) break;
-                    if (line.StartsWith("#")) continue;
+                    if (line.OptimizedStartsWith('#')) continue;
 
-                    var cols = line.Split('\t');
+                    var cols = line.OptimizedSplit('\t');
                     if (cols.Length != 7) throw new InvalidDataException($"Expected 7 columns, but found {cols.Length}: [{line}]");
 
                     var refSeqTranscript    = FormatUtilities.SplitVersion(Sanitize(cols[RefSeqTranscriptIndex]));
@@ -31,7 +33,7 @@ namespace CacheUtils.IntermediateIO
 
                     if (refSeqTranscript.Id  != null) transcriptIds.Add(refSeqTranscript.Id);
                     // ReSharper disable once InvertIf
-                    if (ensemblTranscriptIds != null) foreach (var id in ensemblTranscriptIds) transcriptIds.Add(id);
+                    if (ensemblTranscriptIds != null) foreach (string id in ensemblTranscriptIds) transcriptIds.Add(id);
                 }
             }
 

@@ -4,6 +4,8 @@ using System.IO;
 using System.Text;
 using CacheUtils.DataDumperImport.DataStructures.Import;
 using CacheUtils.DataDumperImport.FauxRegex;
+using IO;
+using OptimizedCore;
 
 namespace CacheUtils.DataDumperImport.IO
 {
@@ -12,7 +14,7 @@ namespace CacheUtils.DataDumperImport.IO
         private readonly StreamReader _reader;
         private readonly StringBuilder _sb = new StringBuilder();
 
-        public DataDumperReader(Stream stream) => _reader = new StreamReader(stream);
+        public DataDumperReader(Stream stream) => _reader = FileUtilities.GetStreamReader(stream);
 
         private string GetNextLine() => _reader.ReadLine();
 
@@ -65,7 +67,7 @@ namespace CacheUtils.DataDumperImport.IO
             while (true)
             {
                 string line = GetNextLine().Trim();
-                if (line.StartsWith("\'")) break;
+                if (line.OptimizedStartsWith('\'')) break;
                 _sb.Append(' ');
                 _sb.Append(line);
             }

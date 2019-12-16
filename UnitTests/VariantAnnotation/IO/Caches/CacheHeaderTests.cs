@@ -1,8 +1,7 @@
 ﻿using System.IO;
 using System.Text;
+using Genome;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.IO;
 using VariantAnnotation.IO.Caches;
 using Xunit;
 
@@ -13,14 +12,14 @@ namespace UnitTests.VariantAnnotation.IO.Caches
         [Fact]
         public void CacheHeader_EndToEnd()
         {
-            const Source expectedTranscriptSource       = Source.BothRefSeqAndEnsembl;
-            const long expectedCreationTimeTicks        = long.MaxValue;
-            const GenomeAssembly expectedGenomeAssembly = GenomeAssembly.hg19;
-            const ushort expectedVepVersion             = ushort.MaxValue;
+            const Source expectedTranscriptSource = Source.BothRefSeqAndEnsembl;
+            const long expectedCreationTimeTicks  = long.MaxValue;
+            const GenomeAssembly expectedAssembly = GenomeAssembly.hg19;
+            const ushort expectedVepVersion       = ushort.MaxValue;
 
+            var expectedBaseHeader   = new Header("VEP", 1, 2, expectedTranscriptSource, expectedCreationTimeTicks, expectedAssembly);
             var expectedCustomHeader = new TranscriptCacheCustomHeader(expectedVepVersion, 0);
-            var expectedHeader = new CacheHeader("VEP", 1, 2, expectedTranscriptSource, expectedCreationTimeTicks,
-                expectedGenomeAssembly, expectedCustomHeader);
+            var expectedHeader       = new CacheHeader(expectedBaseHeader, expectedCustomHeader);
 
             CacheHeader observedHeader;
 
@@ -32,21 +31,14 @@ namespace UnitTests.VariantAnnotation.IO.Caches
                 }
 
                 ms.Position = 0;
-
-                using (var reader = new ExtendedBinaryReader(ms))
-                {
-                    observedHeader = CacheHeader.Read(reader, TranscriptCacheCustomHeader.Read) as CacheHeader;
-                }
+                observedHeader = CacheHeader.Read(ms);
             }
 
             Assert.NotNull(observedHeader);
-            Assert.Equal(expectedTranscriptSource, observedHeader.TranscriptSource);
+            Assert.Equal(expectedTranscriptSource,  observedHeader.Source);
             Assert.Equal(expectedCreationTimeTicks, observedHeader.CreationTimeTicks);
-            Assert.Equal(expectedGenomeAssembly, observedHeader.GenomeAssembly);
-
-            var observedCustomHeader = observedHeader.CustomHeader as TranscriptCacheCustomHeader;
-            Assert.NotNull(observedCustomHeader);
-            Assert.Equal(expectedVepVersion, observedCustomHeader.VepVersion);
+            Assert.Equal(expectedAssembly,    observedHeader.Assembly);
+            Assert.Equal(expectedVepVersion,        observedHeader.Custom.VepVersion);
         }
     }
 }

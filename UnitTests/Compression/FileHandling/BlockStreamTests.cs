@@ -3,45 +3,44 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using Compression.Algorithms;
 using Compression.DataStructures;
 using Compression.FileHandling;
 using ErrorHandling.Exceptions;
+using Genome;
+using IO;
 using UnitTests.TestUtilities;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.IO;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.IO;
 using VariantAnnotation.IO.Caches;
-using VariantAnnotation.Utilities;
 using Xunit;
 
 namespace UnitTests.Compression.FileHandling
 {
-    public sealed class BlockStreamTests : RandomFileBase
+    public sealed class BlockStreamTests
     {
-        private const long NumTicks                         = 3;
-        private const GenomeAssembly ExpectedGenomeAssembly = GenomeAssembly.hg19;
-        private const string SmallString                    = "Testing 123";
-        private const string FinalString                    = "Squeamish Ossifrage";
+        private const long NumTicks                   = 3;
+        private const GenomeAssembly ExpectedAssembly = GenomeAssembly.hg19;
+        private const string SmallString              = "Testing 123";
+        private const string FinalString              = "Squeamish Ossifrage";
 
-        private static readonly Random Random = new Random(10);
-        private static readonly QuickLZ Qlz = new QuickLZ();
+        private static readonly Random Random  = new Random(10);
+        private static readonly Zstandard Zstd = new Zstandard(1);
 
         [Fact]
         public void BlockStream_EndToEnd()
         {
             string expectedString = GetRandomString(Block.DefaultSize + 10000);
 
-            var customHeader = new DemoCustomHeader(new BlockStream.BlockPosition());
-            var header = new CacheHeader(CacheConstants.Identifier, CacheConstants.SchemaVersion,
-                CacheConstants.DataVersion, Source.Ensembl, NumTicks, ExpectedGenomeAssembly, customHeader);
+            var customHeader = new DemoCustomHeader(-1, -1);
+            var header = new DemoHeader(CacheConstants.Identifier, CacheConstants.SchemaVersion,
+                CacheConstants.DataVersion, Source.Ensembl, NumTicks, ExpectedAssembly, customHeader);
 
             using (var ms = new MemoryStream())
             {                
-                WriteBlockStream(Qlz, header, customHeader, ms, expectedString);
-                ms.Seek(0, SeekOrigin.Begin);
-                ReadFromBlockStream(Qlz, ms, expectedString);
+                WriteBlockStream(Zstd, header, customHeader, ms, expectedString);
+                ms.Position = 0;
+                ReadFromBlockStream(Zstd, ms, expectedString);
             }
         }
 
@@ -59,16 +58,16 @@ namespace UnitTests.Compression.FileHandling
         }
 
         // ReSharper disable once UnusedParameter.Local
-        private static void ReadFromBlockStream(ICompressionAlgorithm compressionAlgorithm, MemoryStream ms, string expectedRandomString)
+        private static void ReadFromBlockStream(ICompressionAlgorithm compressionAlgorithm, Stream ms, string expectedRandomString)
         {
-            using (var blockStream  = new BlockStream(compressionAlgorithm, ms, CompressionMode.Decompress))
-            using (var reader = new ExtendedBinaryReader(blockStream))
+            // grab the header
+            var header = DemoHeader.Read(ms);
+            Assert.Equal(ExpectedAssembly, header.Assembly);
+
+            using (var blockStream = new BlockStream(compressionAlgorithm, ms, CompressionMode.Decompress))
+            using (var reader      = new ExtendedBinaryReader(blockStream))
             {
                 CheckWriteException(blockStream);
-
-                // grab the header
-                var header = GetHeader(blockStream, out var customHeader);
-                Assert.Equal(ExpectedGenomeAssembly, header.GenomeAssembly);
 
                 // sequential string check
                 CheckString(reader, expectedRandomString);
@@ -76,13 +75,16 @@ namespace UnitTests.Compression.FileHandling
                 CheckString(reader, FinalString);
 
                 // random access string check
-                blockStream.SetBlockPosition(customHeader.DemoPosition);
+                blockStream.SetBlockPosition(header.Custom.FileOffset, header.Custom.InternalOffset);
+                //reader.Reset();
+
                 CheckString(reader, SmallString);
             }
         }
 
         // ReSharper disable once UnusedParameter.Local
-        private static void CheckString(IExtendedBinaryReader reader, string expectedString)
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
+        private static void CheckString(ExtendedBinaryReader reader, string expectedString)
         {
             string s = reader.ReadAsciiString();           
             Assert.NotNull(s);
@@ -90,37 +92,22 @@ namespace UnitTests.Compression.FileHandling
             Assert.Equal(expectedString, s);
         }
 
-        private static CacheHeader GetHeader(BlockStream blockStream, out DemoCustomHeader customHeader)
-        {
-            var header = (CacheHeader)blockStream.ReadHeader(CacheHeader.Read, DemoCustomHeader.Read);
-            customHeader = header.CustomHeader as DemoCustomHeader;
-            return header;
-        }
-
-        private static void WriteBlockStream(ICompressionAlgorithm compressionAlgorithm, CacheHeader header,
-            DemoCustomHeader customHeader, MemoryStream ms, string s)
+        private static void WriteBlockStream(ICompressionAlgorithm compressionAlgorithm, DemoHeader header,
+            DemoCustomHeader customHeader, Stream ms, string s)
         {
             using (var blockStream  = new BlockStream(compressionAlgorithm, ms, CompressionMode.Compress, true))
-            using (var writer = new ExtendedBinaryWriter(blockStream))
+            using (var writer       = new ExtendedBinaryWriter(blockStream))
             {
                 CheckReadException(blockStream);
 
                 blockStream.WriteHeader(header.Write);
 
-                var bp = new BlockStream.BlockPosition();
-
-                // detect that we have written a block
-                blockStream.GetBlockPosition(bp);
                 writer.WriteOptAscii(s);
-                blockStream.GetBlockPosition(bp);
 
-                // here we write a test string that won't invoke a new block
-                blockStream.GetBlockPosition(customHeader.DemoPosition);
+                (customHeader.FileOffset, customHeader.InternalOffset) = blockStream.GetBlockPosition();
+                Assert.Equal(customHeader.FileOffset, blockStream.Position);
+
                 writer.WriteOptAscii(SmallString);
-                blockStream.GetBlockPosition(bp);
-
-                Assert.Equal(customHeader.DemoPosition.FileOffset, blockStream.Position);
-
                 blockStream.Flush();
 
                 // this will be flushed during dispose
@@ -128,7 +115,7 @@ namespace UnitTests.Compression.FileHandling
             }
         }
 
-        private static void CheckReadException(BlockStream writer)
+        private static void CheckReadException(Stream writer)
         {
             var exception = Record.Exception(() =>
             {
@@ -141,7 +128,7 @@ namespace UnitTests.Compression.FileHandling
             Assert.IsType<CompressionException>(exception);
         }
 
-        private static void CheckWriteException(BlockStream reader)
+        private static void CheckWriteException(Stream reader)
         {
             var exception = Record.Exception(() =>
             {
@@ -159,7 +146,7 @@ namespace UnitTests.Compression.FileHandling
         {
             Assert.Throws<ArgumentNullException>(delegate
             {
-                using (new BlockStream(Qlz, null, CompressionMode.Decompress))
+                using (new BlockStream(Zstd, null, CompressionMode.Decompress))
                 {
                 }
             });
@@ -171,7 +158,7 @@ namespace UnitTests.Compression.FileHandling
             using (var ms = new MemoryStream())
             {
                 // ReSharper disable AccessToDisposedClosure
-                using (var writer = new BlockStream(Qlz, ms, CompressionMode.Compress, true))
+                using (var writer = new BlockStream(Zstd, ms, CompressionMode.Compress, true))
                 {
                     Assert.Throws<NotSupportedException>(delegate
                     {
@@ -192,14 +179,14 @@ namespace UnitTests.Compression.FileHandling
         [Fact]
         public void StreamTypeMismatch()
         {
-            string randomPath = GetRandomPath();
+            string randomPath = RandomPath.GetRandomPath();
 
             using (var writeStream = new FileStream(randomPath, FileMode.Create, FileAccess.Write))
             {
                 Assert.Throws<ArgumentException>(delegate
                 {
                     // ReSharper disable once AccessToDisposedClosure
-                    using (new BlockStream(Qlz, writeStream, CompressionMode.Decompress))
+                    using (new BlockStream(Zstd, writeStream, CompressionMode.Decompress))
                     {
                     }
                 });
@@ -210,7 +197,7 @@ namespace UnitTests.Compression.FileHandling
                 Assert.Throws<ArgumentException>(delegate
                 {
                     // ReSharper disable once AccessToDisposedClosure
-                    using (new BlockStream(Qlz, readStream, CompressionMode.Compress))
+                    using (new BlockStream(Zstd, readStream, CompressionMode.Compress))
                     {
                     }
                 });
@@ -220,10 +207,10 @@ namespace UnitTests.Compression.FileHandling
         [Fact]
         public void CanReadWriteSeek()
         {
-            string randomPath = GetRandomPath();
+            string randomPath = RandomPath.GetRandomPath();
 
             using (var writeStream = new FileStream(randomPath, FileMode.Create, FileAccess.Write))
-            using (var blockStream = new BlockStream(Qlz, writeStream, CompressionMode.Compress))
+            using (var blockStream = new BlockStream(Zstd, writeStream, CompressionMode.Compress))
             {
                 Assert.False(blockStream.CanRead);
                 Assert.True(blockStream.CanWrite);
@@ -236,7 +223,7 @@ namespace UnitTests.Compression.FileHandling
         {
             using (var ms = new MemoryStream())
             {
-                using (var blockStream = new BlockStream(Qlz, ms, CompressionMode.Compress))
+                using (var blockStream = new BlockStream(Zstd, ms, CompressionMode.Compress))
                 {
                     var buffer = new byte[10];
 
@@ -257,14 +244,14 @@ namespace UnitTests.Compression.FileHandling
                 var writeBuffer = GetRandomBytes(100);
                 var readBuffer  = new byte[60];
 
-                using (var blockStream = new BlockStream(Qlz, ms, CompressionMode.Compress, true))
+                using (var blockStream = new BlockStream(Zstd, ms, CompressionMode.Compress, true))
                 {
                     blockStream.Write(writeBuffer, 0, writeBuffer.Length);
                 }
 
                 ms.Position = 0;
 
-                using (var blockStream = new BlockStream(Qlz, ms, CompressionMode.Decompress))
+                using (var blockStream = new BlockStream(Zstd, ms, CompressionMode.Decompress))
                 {
                     int numBytesRead = blockStream.Read(readBuffer, 0, readBuffer.Length);
                     Assert.Equal(readBuffer.Length, numBytesRead);
@@ -283,40 +270,69 @@ namespace UnitTests.Compression.FileHandling
         {
             using (var ms = new MemoryStream())
             {
-                var blockStream = new BlockStream(Qlz, ms, CompressionMode.Compress);
+                var blockStream = new BlockStream(Zstd, ms, CompressionMode.Compress);
                 blockStream.Dispose();
                 blockStream.Dispose();
             }
         }
     }
 
-    public sealed class DemoCustomHeader : ICustomCacheHeader
+    public sealed class DemoHeader : Header
     {
-        public readonly BlockStream.BlockPosition DemoPosition;
+        public readonly DemoCustomHeader Custom;
 
-        public DemoCustomHeader(BlockStream.BlockPosition demoPosition)
+        public DemoHeader(string identifier, ushort schemaVersion, ushort dataVersion, Source source,
+            long creationTimeTicks, GenomeAssembly genomeAssembly, DemoCustomHeader customHeader) : base(
+            identifier, schemaVersion, dataVersion, source, creationTimeTicks, genomeAssembly)
         {
-            DemoPosition = demoPosition;
+            Custom = customHeader;
+        }
+
+        public new void Write(BinaryWriter writer)
+        {
+            base.Write(writer);
+            Custom.Write(writer);
+        }
+
+        public static DemoHeader Read(Stream stream)
+        {
+            DemoHeader header;
+
+            using (var reader = new BinaryReader(stream, Encoding.Default, true))
+            {
+                var baseHeader   = Read(reader);
+                var customHeader = DemoCustomHeader.Read(reader);
+
+                header = new DemoHeader(baseHeader.Identifier, baseHeader.SchemaVersion, baseHeader.DataVersion,
+                    baseHeader.Source, baseHeader.CreationTimeTicks, baseHeader.Assembly, customHeader);
+            }
+
+            return header;
+        }
+    }
+
+    public sealed class DemoCustomHeader
+    {
+        public long FileOffset;
+        public int InternalOffset;
+
+        public DemoCustomHeader(long fileOffset, int internalOffset)
+        {
+            FileOffset     = fileOffset;
+            InternalOffset = internalOffset;
         }
 
         public void Write(BinaryWriter writer)
         {
-            writer.Write(DemoPosition.FileOffset);
-            writer.Write(DemoPosition.InternalOffset);
+            writer.Write(FileOffset);
+            writer.Write(InternalOffset);
         }
 
-        public static ICustomCacheHeader Read(BinaryReader reader)
+        public static DemoCustomHeader Read(BinaryReader reader)
         {
-            var fileOffset     = reader.ReadInt64();
-            var internalOffset = reader.ReadInt32();
-
-            var bp = new BlockStream.BlockPosition
-            {
-                FileOffset     = fileOffset,
-                InternalOffset = internalOffset
-            };
-
-            return new DemoCustomHeader(bp);
+            long fileOffset    = reader.ReadInt64();
+            int internalOffset = reader.ReadInt32();
+            return new DemoCustomHeader(fileOffset, internalOffset);
         }
     }
 }

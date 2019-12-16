@@ -1,9 +1,9 @@
-﻿using Moq;
+﻿using Genome;
+using Moq;
 using UnitTests.TestDataStructures;
 using VariantAnnotation.AnnotatedPositions;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Sequence;
 using Xunit;
 
 namespace UnitTests.VariantAnnotation.AnnotatedPositions
@@ -265,30 +265,6 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             Assert.Equal("*909+909", po.Value);
         }
 
-        private static ITranscript GetForwardGapTranscript()
-        {
-            var regions = new ITranscriptRegion[]
-            {
-                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1001, 1100, 1, 100),
-                new TranscriptRegion(TranscriptRegionType.Gap,    1, 1101, 1103, 100, 101),
-                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1104, 1203, 101, 200),
-                new TranscriptRegion(TranscriptRegionType.Intron, 1, 1204, 1303, 200, 201),
-                new TranscriptRegion(TranscriptRegionType.Exon,   2, 1304, 1403, 201, 300)
-            };
-
-            var translation = new Mock<ITranslation>();
-            translation.SetupGet(x => x.CodingRegion).Returns(new CodingRegion(1051, 1353, 51, 250, 200));
-
-            var transcript = new Mock<ITranscript>();
-            transcript.SetupGet(x => x.Start).Returns(1001);
-            transcript.SetupGet(x => x.End).Returns(1403);
-            transcript.SetupGet(x => x.Gene.OnReverseStrand).Returns(false);
-            transcript.SetupGet(x => x.TranscriptRegions).Returns(regions);
-            transcript.SetupGet(x => x.Translation).Returns(translation.Object);
-
-            return transcript.Object;
-        }
-
         [Fact]
         public void GetCdnaPositionOffset_Gap_LeftSide_Forward()
         {
@@ -313,30 +289,6 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             Assert.Equal(0, po.Offset);
             Assert.Equal(101, po.Position);
             Assert.Equal("51", po.Value);
-        }
-
-        private static ITranscript GetReverseGapTranscript()
-        {
-            var regions = new ITranscriptRegion[]
-            {
-                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1001, 1100, 201, 300),
-                new TranscriptRegion(TranscriptRegionType.Gap,    1, 1101, 1103, 200, 201),
-                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1104, 1203, 101, 200),
-                new TranscriptRegion(TranscriptRegionType.Intron, 1, 1204, 1303, 100, 101),
-                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1304, 1403, 1, 100)
-            };
-
-            var translation = new Mock<ITranslation>();
-            translation.SetupGet(x => x.CodingRegion).Returns(new CodingRegion(1051, 1353, 51, 250, 200));
-
-            var transcript = new Mock<ITranscript>();
-            transcript.SetupGet(x => x.Start).Returns(1001);
-            transcript.SetupGet(x => x.End).Returns(1403);
-            transcript.SetupGet(x => x.Gene.OnReverseStrand).Returns(true);
-            transcript.SetupGet(x => x.TranscriptRegions).Returns(regions);
-            transcript.SetupGet(x => x.Translation).Returns(translation.Object);
-
-            return transcript.Object;
         }
 
         [Fact]
@@ -429,6 +381,19 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             Assert.Equal(1659, po.Position);
             Assert.Equal("*809", po.Value);
         }
+        //temp skipping to run smoke tests
+        //[Fact]
+        //public void GetCdnaPositionOffset_RnaEdits()
+        //{
+        //    var transcript = GetRnaEditTranscript();
+        //    var positionOffset = HgvsUtilities.GetCdnaPositionOffset(transcript, 51135987, 20);
+
+        //    Assert.NotNull(positionOffset);
+        //    Assert.False(positionOffset.HasStopCodonNotation);
+        //    Assert.Equal(0, positionOffset.Offset);
+        //    Assert.Equal(1343, positionOffset.Position);
+        //    Assert.Equal("1343", positionOffset.Value);
+        //}
 
         [Fact]
         public void GetCdnaPositionOffset_Gap_Forward_ReturnNull()
@@ -476,6 +441,54 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             transcript.SetupGet(x => x.StartExonPhase).Returns(0);
             transcript.SetupGet(x => x.Gene.OnReverseStrand).Returns(false);
             transcript.SetupGet(x => x.Translation.CodingRegion.CdnaStart).Returns(1);
+            return transcript.Object;
+        }
+
+        private static ITranscript GetReverseGapTranscript()
+        {
+            var regions = new ITranscriptRegion[]
+            {
+                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1001, 1100, 201, 300),
+                new TranscriptRegion(TranscriptRegionType.Gap,    1, 1101, 1103, 200, 201),
+                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1104, 1203, 101, 200),
+                new TranscriptRegion(TranscriptRegionType.Intron, 1, 1204, 1303, 100, 101),
+                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1304, 1403, 1, 100)
+            };
+
+            var translation = new Mock<ITranslation>();
+            translation.SetupGet(x => x.CodingRegion).Returns(new CodingRegion(1051, 1353, 51, 250, 200));
+
+            var transcript = new Mock<ITranscript>();
+            transcript.SetupGet(x => x.Start).Returns(1001);
+            transcript.SetupGet(x => x.End).Returns(1403);
+            transcript.SetupGet(x => x.Gene.OnReverseStrand).Returns(true);
+            transcript.SetupGet(x => x.TranscriptRegions).Returns(regions);
+            transcript.SetupGet(x => x.Translation).Returns(translation.Object);
+
+            return transcript.Object;
+        }
+
+        private static ITranscript GetForwardGapTranscript()
+        {
+            var regions = new ITranscriptRegion[]
+            {
+                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1001, 1100, 1, 100),
+                new TranscriptRegion(TranscriptRegionType.Gap,    1, 1101, 1103, 100, 101),
+                new TranscriptRegion(TranscriptRegionType.Exon,   1, 1104, 1203, 101, 200),
+                new TranscriptRegion(TranscriptRegionType.Intron, 1, 1204, 1303, 200, 201),
+                new TranscriptRegion(TranscriptRegionType.Exon,   2, 1304, 1403, 201, 300)
+            };
+
+            var translation = new Mock<ITranslation>();
+            translation.SetupGet(x => x.CodingRegion).Returns(new CodingRegion(1051, 1353, 51, 250, 200));
+
+            var transcript = new Mock<ITranscript>();
+            transcript.SetupGet(x => x.Start).Returns(1001);
+            transcript.SetupGet(x => x.End).Returns(1403);
+            transcript.SetupGet(x => x.Gene.OnReverseStrand).Returns(false);
+            transcript.SetupGet(x => x.TranscriptRegions).Returns(regions);
+            transcript.SetupGet(x => x.Translation).Returns(translation.Object);
+
             return transcript.Object;
         }
     }

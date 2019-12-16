@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
-using VariantAnnotation.Caches.DataStructures;
+using Intervals;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
 using VariantAnnotation.Interface.Providers;
 using VariantAnnotation.IO.Caches;
 using VariantAnnotation.Providers;
@@ -35,7 +34,7 @@ namespace VariantAnnotation.Caches
         public TranscriptCache GetCache()
         {
             var dataSourceVersions = GetDataSourceVersions(Header);
-            return new TranscriptCache(dataSourceVersions, Header.GenomeAssembly, TranscriptIntervalArrays, RegulatoryRegionIntervalArrays);
+            return new TranscriptCache(dataSourceVersions, Header.Assembly, TranscriptIntervalArrays, RegulatoryRegionIntervalArrays);
         }
 
         private static IEnumerable<IDataSourceVersion> GetDataSourceVersions(CacheHeader header)
@@ -43,10 +42,9 @@ namespace VariantAnnotation.Caches
             var dataSourceVersions = new List<IDataSourceVersion>();
             if (header == null) return dataSourceVersions;
 
-            var customHeader = header.CustomHeader as TranscriptCacheCustomHeader;
-            var vepVersion   = customHeader?.VepVersion;
+            ushort vepVersion = header.Custom.VepVersion;
 
-            var dataSourceVersion = new DataSourceVersion("VEP", vepVersion.ToString(), header.CreationTimeTicks, header.TranscriptSource.ToString());
+            var dataSourceVersion = new DataSourceVersion("VEP", vepVersion.ToString(), header.CreationTimeTicks, header.Source.ToString());
             dataSourceVersions.Add(dataSourceVersion);
             return dataSourceVersions;
         }

@@ -1,7 +1,7 @@
-﻿using VariantAnnotation.Algorithms;
+﻿using Intervals;
+using VariantAnnotation.Algorithms;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.Intervals;
 
 namespace VariantAnnotation.AnnotatedPositions.Transcript
 {
@@ -30,7 +30,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             return (cdnaStart, cdnaEnd);
         }
 
-        private static int GetCdnaPosition(ITranscriptRegion region, int variantPosition, bool onReverseStrand)
+        private static int GetCdnaPosition(ITranscriptRegion region, int variantPosition,  bool onReverseStrand)
         {
             if (region == null || region.Type != TranscriptRegionType.Exon) return -1;
 
@@ -68,8 +68,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
         private static ITranscriptRegion GetCoveredRegion(this ITranscriptRegion[] regions, int regionIndex)
         {
             if (regionIndex == -1) return regions[0];
-            if (regionIndex == ~regions.Length) return regions[regions.Length - 1];
-            return regions[regionIndex];
+            return regionIndex == ~regions.Length ? regions[regions.Length - 1] : regions[regionIndex];
         }
 
         private static int GetCoveredCdnaPosition(int cdnaPosition, ITranscriptRegion region, int regionIndex, bool onReverseStrand, int codingEnd)
@@ -86,19 +85,19 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             return onReverseStrand ? region.CdnaStart : region.CdnaEnd;
         }
 
-        public static (int Start, int End) GetCoveredCdsPositions(int coveredCdnaStart, int coveredCdnaEnd,
+        public static (int CdsStart, int CdsEnd, int ProteinStart, int ProteinEnd) GetCoveredCdsAndProteinPositions(int coveredCdnaStart, int coveredCdnaEnd,
             byte startExonPhase, ICodingRegion codingRegion)
         {
             if (codingRegion == null || 
                 coveredCdnaEnd < codingRegion.CdnaStart || 
                 coveredCdnaStart > codingRegion.CdnaEnd ||
-                coveredCdnaStart == -1 && coveredCdnaEnd == -1) return (-1, -1);
+                coveredCdnaStart == -1 && coveredCdnaEnd == -1) return (-1, -1, -1, -1);
 
             int beginOffset = startExonPhase - codingRegion.CdnaStart + 1;
             var start = coveredCdnaStart + beginOffset;
             var end   = coveredCdnaEnd + beginOffset;
 
-            return (start, end);
+            return (start, end, GetProteinPosition(start), GetProteinPosition(end));
         }
 
         public static int GetProteinPosition(int cdsPosition)

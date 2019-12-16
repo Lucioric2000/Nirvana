@@ -1,89 +1,97 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using CommonUtilities;
+using Genome;
+using OptimizedCore;
 using VariantAnnotation.Interface.IO;
 using VariantAnnotation.Interface.Positions;
 using VariantAnnotation.Interface.Providers;
-using VariantAnnotation.Interface.Sequence;
+using Variants;
+using Vcf.Sample;
 
 namespace Vcf.VariantCreator
 {
     public sealed class VariantFactory
     {
-        private readonly IRefMinorProvider _refMinorProvider;
         private readonly IDictionary<string, IChromosome> _refNameToChromosome;
+        private readonly ISequenceProvider _sequenceProvider;
         private const string StrPrefix = "<STR";
-        private const string CnvPrefix = "<CN";
-        private readonly bool _enableVerboseTranscript;
+        private const string RohAltAllele = "<ROH>";
 
-        public VariantFactory(IDictionary<string, IChromosome> refNameToChromosome, IRefMinorProvider refMinorProvider,
-            bool enableVerboseTranscript)
+        public readonly FormatIndices FormatIndices = new FormatIndices();
+
+        public VariantFactory(ISequenceProvider sequenceProvider)
         {
-            _refNameToChromosome     = refNameToChromosome;
-            _refMinorProvider        = refMinorProvider;
-            _enableVerboseTranscript = enableVerboseTranscript;
+            _sequenceProvider = sequenceProvider;
+            _refNameToChromosome = sequenceProvider.RefNameToChromosome;
         }
 
-        private static VariantCategory GetVariantCategory(string[] altAlleles, bool isReference, bool isSymbolicAllele, VariantType svType)
+        private static VariantCategory GetVariantCategory(string firstAltAllele, bool isReference, bool isSymbolicAllele, VariantType svType)
         {
-            if (isReference)                                  return VariantCategory.Reference;
-            if (IsBreakend(altAlleles))                       return VariantCategory.SV;
-            if (!isSymbolicAllele)                            return VariantCategory.SmallVariant;
-            if (altAlleles.Any(x => x.StartsWith(StrPrefix))) return VariantCategory.RepeatExpansion;
+            if (isReference)                          return VariantCategory.Reference;
+            if (firstAltAllele == RohAltAllele)       return VariantCategory.ROH; 
+            if (IsBreakend(firstAltAllele))           return VariantCategory.SV;
+            if (!isSymbolicAllele)                    return VariantCategory.SmallVariant;
+            if (firstAltAllele.StartsWith(StrPrefix)) return VariantCategory.RepeatExpansion;
             return svType == VariantType.copy_number_variation ? VariantCategory.CNV : VariantCategory.SV;
         }
 
-        private static bool IsBreakend(string[] altAlleles)
+        private static bool IsBreakend(string altAllele) => altAllele.Contains("[") || altAllele.Contains("]");
+
+        private static bool IsSymbolicAllele(string altAllele) =>
+            altAllele.OptimizedStartsWith('<') && altAllele.OptimizedEndsWith('>') && !VcfCommon.IsNonInformativeAltAllele(altAllele);
+
+        public IVariant[] CreateVariants(IChromosome chromosome, int start, int end, string refAllele,
+            string[] altAlleles, IInfoData infoData, bool[] isDecomposed, bool isRecomposed, List<string>[] linkedVids, string globalMajorAllele)
         {
-            return altAlleles.Any(x => x.Contains("[")) || altAlleles.Any(x => x.Contains("]"));
-        }
+            string firstAltAllele = altAlleles[0];
+            bool isReference      = globalMajorAllele != null;
+            bool isSymbolicAllele = IsSymbolicAllele(firstAltAllele);
+            var variantCategory   = GetVariantCategory(firstAltAllele, isReference, isSymbolicAllele, infoData.SvType);
 
-        private static bool IsSymbolicAllele(string altAllele)
-        {
-            return altAllele.StartsWith("<") && altAllele.EndsWith(">") && !VcfCommon.NonInformativeAltAllele.Contains(altAllele);
-        }
+            if (isReference) return new[] { GetVariant(chromosome, start, end, refAllele, firstAltAllele, infoData, variantCategory, isDecomposed[0], isRecomposed, linkedVids?[0]?.ToArray(), globalMajorAllele) };
 
-        public IVariant[] CreateVariants(IChromosome chromosome, string id, int start, int end, string refAllele, string[] altAlleles, IInfoData infoData, bool[] isDecomposed, bool isRecomposed)
-        {
-            var isReference      = altAlleles.Length == 1 && VcfCommon.ReferenceAltAllele.Contains(altAlleles[0]);
-            var isSymbolicAllele = altAlleles.Any(IsSymbolicAllele);
-            var variantCategory  = GetVariantCategory(altAlleles, isReference, isSymbolicAllele, infoData.SvType);
-
-            if (isReference) return new[] { GetVariant(chromosome, id, start, end, refAllele, altAlleles[0], infoData, variantCategory, isDecomposed[0], isRecomposed) };
-
+            _sequenceProvider.LoadChromosome(chromosome);
             var variants = new List<IVariant>();
-
-            // ReSharper disable once LoopCanBeConvertedToQuery
-            for (int i = 0; i < altAlleles.Length; i++)
+            for (var i = 0; i < altAlleles.Length; i++)
             {
-                string altAllele = altAlleles[i];
+#if (!NI_ALLELE)
+                if (VcfCommon.IsNonInformativeAltAllele(altAlleles[i])) continue;
+#endif
                 bool isDecomposedVar = isDecomposed[i];
-                if (VcfCommon.NonInformativeAltAllele.Contains(altAllele)) continue;
-                variants.Add(GetVariant(chromosome, id, start, end, refAllele, altAllele, infoData, variantCategory, isDecomposedVar, isRecomposed));
+                (int shiftedStart, string shiftedRef, string shiftedAlt) =
+                    VariantUtils.TrimAndLeftAlign(start, refAllele, altAlleles[i], _sequenceProvider.Sequence);
+
+                variants.Add(GetVariant(chromosome, shiftedStart, end - (start- shiftedStart), shiftedRef, shiftedAlt, infoData, variantCategory, isDecomposedVar, isRecomposed, linkedVids?[i]?.ToArray(), null));
             }
 
             return variants.Count == 0 ? null : variants.ToArray();
         }
 
-        private IVariant GetVariant(IChromosome chromosome, string id, int start, int end, string refAllele, string altAllele, IInfoData infoData, VariantCategory category, bool isDecomposedVar, bool isRecomposed)
+        private IVariant GetVariant(IChromosome chromosome, int start, int end, string refAllele, string altAllele,
+            IInfoData infoData, VariantCategory category, bool isDecomposedVar, bool isRecomposed, string[] linkedVids, string globalMajorAllele)
         {
             switch (category)
             {
                 case VariantCategory.Reference:
-                    var refMinorGlobalMajorAllele = _refMinorProvider?.GetGlobalMajorAlleleForRefMinor(chromosome, start);
-                    return ReferenceVariantCreator.Create(chromosome, start, end, refAllele, altAllele, refMinorGlobalMajorAllele);
+                    return ReferenceVariantCreator.Create(chromosome, start, end, refAllele, altAllele, globalMajorAllele);
+
                 case VariantCategory.SmallVariant:
-                    return SmallVariantCreator.Create(chromosome, start, refAllele, altAllele, isDecomposedVar, isRecomposed);
+                    return SmallVariantCreator.Create(chromosome, start, refAllele, altAllele, isDecomposedVar, isRecomposed, linkedVids);
+
+                case VariantCategory.ROH:
+                    return RohVariantCreator.Create(chromosome, start, refAllele, altAllele, infoData);
+
                 case VariantCategory.SV:
                     var svBreakEnds = infoData.SvType == VariantType.translocation_breakend ?
                         GetTranslocationBreakends(chromosome, refAllele, altAllele, start)
-                        : GetSvBreakEnds(chromosome.EnsemblName, start, infoData.SvType, infoData.End, infoData.IsInv3, infoData.IsInv5);
-                    return StructuralVariantCreator.Create(chromosome, start, refAllele, altAllele, svBreakEnds, infoData, _enableVerboseTranscript);
+                        : GetSvBreakEnds(chromosome.EnsemblName, start, infoData.SvType, infoData.End);
+                    return StructuralVariantCreator.Create(chromosome, start, refAllele, altAllele, svBreakEnds, infoData);
+
                 case VariantCategory.CNV:
-                    return CnvCreator.Create(chromosome, id, start, refAllele, altAllele, infoData, _enableVerboseTranscript);
+                    return CnvCreator.Create(chromosome, start, refAllele, altAllele, infoData);
+
                 case VariantCategory.RepeatExpansion:
                     return RepeatExpansionCreator.Create(chromosome, start, refAllele, altAllele, infoData);
                 default:
@@ -93,15 +101,15 @@ namespace Vcf.VariantCreator
 
         internal IBreakEnd[] GetTranslocationBreakends(IChromosome chromosome1, string refAllele, string altAllele, int position1)
         {
-            var breakendInfo = ParseBreakendAltAllele(refAllele, altAllele);
-            return new IBreakEnd[] { new BreakEnd(chromosome1, breakendInfo.Chromosome2, position1, breakendInfo.Position2, breakendInfo.IsSuffix1, breakendInfo.IsSuffix2) };
+            (IChromosome chromosome2, int position2, bool isSuffix1, bool isSuffix2) = ParseBreakendAltAllele(refAllele, altAllele);
+            return new IBreakEnd[] { new BreakEnd(chromosome1, chromosome2, position1, position2, isSuffix1, isSuffix2) };
         }
 
-        internal IBreakEnd[] GetSvBreakEnds(string ensemblName, int start, VariantType svType, int? svEnd, bool isInv3, bool isInv5)
+        internal IBreakEnd[] GetSvBreakEnds(string ensemblName, int start, VariantType svType, int? svEnd)
         {
             if (svEnd == null) return null;
 
-            var end        = svEnd.Value;
+            int end        = svEnd.Value;
             var breakEnds  = new IBreakEnd[2];
             var chromosome = ReferenceNameUtilities.GetChromosome(_refNameToChromosome, ensemblName);
 
@@ -120,19 +128,6 @@ namespace Vcf.VariantCreator
                     break;
 
                 case VariantType.inversion:
-                    if (isInv3)
-                    {
-                        breakEnds[0] = new BreakEnd(chromosome, chromosome, start, end, false, false);
-                        breakEnds[1] = new BreakEnd(chromosome, chromosome, end, start, false, false);
-                        break;
-                    }
-                    if (isInv5)
-                    {
-                        breakEnds[0] = new BreakEnd(chromosome, chromosome, start + 1, end + 1, true, true);
-                        breakEnds[1] = new BreakEnd(chromosome, chromosome, end + 1, start + 1, true, true);
-                        break;
-                    }
-
                     breakEnds[0] = new BreakEnd(chromosome, chromosome, start, end, false, false);
                     breakEnds[1] = new BreakEnd(chromosome, chromosome, end + 1, start + 1, true, true);
                     break;
@@ -189,13 +184,14 @@ namespace Vcf.VariantCreator
             }
         }
 
-        private enum VariantCategory
+        public enum VariantCategory
         {
             Reference,
             SmallVariant,
             SV,
             CNV,
-            RepeatExpansion
+            RepeatExpansion,
+            ROH
         }
     }
 }

@@ -1,5 +1,5 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
+using IO;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 
 namespace VariantAnnotation.Caches.DataStructures
@@ -21,9 +21,6 @@ namespace VariantAnnotation.Caches.DataStructures
             _lut  = lut;
         }
 
-        /// <summary>
-        /// returns a prediction and score given the new AA and the AA position
-        /// </summary>
         public Entry GetPrediction(char newAminoAcid, int aaPosition)
         {
             // sanity check: skip stop codons
@@ -34,13 +31,10 @@ namespace VariantAnnotation.Caches.DataStructures
             // sanity check: skip instances where the data isn't long enough
             if (index >= _data.Length) return null;
 
-            var entry = _data[index];
+            byte entry = _data[index];
             return entry == NullEntry ? null : _lut[entry];
         }
 
-        /// <summary>
-        /// returns the index given the new AA and the AA position
-        /// </summary>
         private static int GetIndex(char newAminoAcid, int aaPosition)
         {
             int asciiIndex = char.ToUpper(newAminoAcid) - 'A';
@@ -48,7 +42,7 @@ namespace VariantAnnotation.Caches.DataStructures
             // sanity check: make sure the array index is within range
             if (asciiIndex < 0 || asciiIndex >= 26)
             {
-                throw new IndexOutOfRangeException($"Expected an array index on the interval [0, 25], but observed the following: {asciiIndex} ({newAminoAcid})");
+                throw new InvalidDataException($"Expected an array index on the interval [0, 25], but observed the following: {asciiIndex} ({newAminoAcid})");
             }
 
             int aaIndex = AminoAcidIndices[asciiIndex];
@@ -56,7 +50,7 @@ namespace VariantAnnotation.Caches.DataStructures
             // sanity check: make sure the array index is within range
             if (aaIndex == -1)
             {
-                throw new ArgumentOutOfRangeException($"An invalid amino acid was given: {newAminoAcid}");
+                throw new InvalidDataException($"An invalid amino acid was given: {newAminoAcid}");
             }
 
             return NumAminoAcids * (aaPosition - 1) + aaIndex;
@@ -68,9 +62,9 @@ namespace VariantAnnotation.Caches.DataStructures
             writer.Write(_data);
         }
 
-        public static Prediction Read(BinaryReader reader, Entry[] lut)
+        public static Prediction Read(ExtendedBinaryReader reader, Entry[] lut)
         {
-            var numBytes = reader.ReadInt32();
+            int numBytes = reader.ReadInt32();
             var data     = reader.ReadBytes(numBytes);
             return new Prediction(data, lut);
         }
@@ -86,10 +80,10 @@ namespace VariantAnnotation.Caches.DataStructures
                 EnumIndex = enumIndex;
             }
 
-            public static Entry Read(BinaryReader reader)
+            public static Entry ReadEntry(ExtendedBinaryReader reader)
             {
-                var score     = reader.ReadDouble();
-                var enumIndex = reader.ReadByte();
+                double score   = reader.ReadDouble();
+                byte enumIndex = reader.ReadByte();
                 return new Entry(score, enumIndex);
             }
 

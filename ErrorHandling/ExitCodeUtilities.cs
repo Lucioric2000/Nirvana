@@ -8,7 +8,6 @@ namespace ErrorHandling
 	public static class ExitCodeUtilities
 	{
 		private static readonly Dictionary<Type, ExitCodes> ExceptionsToExitCodes;
-		private static readonly HashSet<Type> UserFriendlyExceptions;
 	    public const string VcfLine = "VcfLine";
 
 		// constructor
@@ -34,18 +33,6 @@ namespace ErrorHandling
 				{ typeof(MissingCompressionLibraryException), ExitCodes.MissingCompressionLibrary },
 			    { typeof(CompressionException),               ExitCodes.Compression }
             };
-
-			// define which exceptions should not include a full stack trace
-			UserFriendlyExceptions = new HashSet<Type>
-			{
-				typeof(UserErrorException),
-				typeof(FileNotSortedException),
-				typeof(UnauthorizedAccessException),
-				typeof(InvalidFileFormatException),
-				typeof(ProcessLockedFileException),
-				typeof(OutOfMemoryException),
-				typeof(MissingCompressionLibraryException)
-			};
 		}
 
 	    internal static ExitCodes GetExitCode(Type exceptionType)
@@ -56,6 +43,7 @@ namespace ErrorHandling
 
 		/// <summary>
 		/// Displays the details behind the exception
+		/// Throw exceptions that are not user friendly if needed
 		/// </summary>
 		public static ExitCodes ShowException(Exception e)
 		{
@@ -63,14 +51,14 @@ namespace ErrorHandling
 			Console.Write("\nERROR: ");
 			Console.ResetColor();
 
-            while (e.InnerException != null) e = e.InnerException;
+		    e = ExceptionUtilities.GetInnermostException(e);
 
             Console.WriteLine("{0}", e.Message);
 
 			var exceptionType = e.GetType();
 
 		    // ReSharper disable once InvertIf
-			if (!UserFriendlyExceptions.Contains(exceptionType))
+			if (!ExceptionUtilities.UserFriendlyExceptions.Contains(exceptionType))
 			{
 				// print the stack trace
 				Console.ForegroundColor = ConsoleColor.Red;
@@ -91,5 +79,5 @@ namespace ErrorHandling
 
 		    return GetExitCode(exceptionType);
 		}
-	}
+    }
 }

@@ -1,6 +1,6 @@
 ﻿using System;
+using IO;
 using VariantAnnotation.Interface.AnnotatedPositions;
-using VariantAnnotation.Interface.IO;
 using VariantAnnotation.Utilities;
 
 namespace VariantAnnotation.AnnotatedPositions.Transcript
@@ -55,12 +55,15 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             return Empty;
         }
 
+        public bool IsPredictedTranscript() =>
+            _id == IdType.RefSeqPredictedMessengerRNA || _id == IdType.RefSeqPredictedNonCodingRNA;
+
         private static uint ToInfo(int num, int len) => (uint)(num << 4 | (len & LengthMask));
 
         private static CompactId GetCompactId(string s, int prefixLen, IdType idType, byte version)
         {
             var (id, _) = FormatUtilities.SplitVersion(s);
-            var num     = int.Parse(id.Substring(prefixLen));
+            int num     = int.Parse(id.Substring(prefixLen));
             return new CompactId(idType, version, ToInfo(num, id.Length - prefixLen));
         }
 
@@ -94,6 +97,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
 
         private string GetPrefix()
         {
+            // ReSharper disable once SwitchStatementMissingSomeCases
             switch (_id)
             {
                 case IdType.EnsemblGene:
@@ -134,7 +138,7 @@ namespace VariantAnnotation.AnnotatedPositions.Transcript
             writer.Write(_info);
         }
 
-        public static CompactId Read(IExtendedBinaryReader reader)
+        public static CompactId Read(IBufferedBinaryReader reader)
         {
             var id      = (IdType)reader.ReadByte();
             var version = reader.ReadByte();

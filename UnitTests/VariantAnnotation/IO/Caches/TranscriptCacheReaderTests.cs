@@ -3,16 +3,15 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CacheUtils.TranscriptCache;
+using Genome;
+using Intervals;
+using IO;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Caches;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.IO;
 using VariantAnnotation.IO.Caches;
-using VariantAnnotation.Sequence;
 using Xunit;
 
 namespace UnitTests.VariantAnnotation.IO.Caches
@@ -38,8 +37,9 @@ namespace UnitTests.VariantAnnotation.IO.Caches
 
             const GenomeAssembly genomeAssembly = GenomeAssembly.GRCh38;
 
+            var baseHeader   = new Header("test", 2, 3, Source.BothRefSeqAndEnsembl, 4, genomeAssembly);
             var customHeader = new TranscriptCacheCustomHeader(1, 2);
-            _expectedHeader = new CacheHeader("test", 2, 3, Source.BothRefSeqAndEnsembl, 4, genomeAssembly, customHeader);
+            _expectedHeader  = new CacheHeader(baseHeader, customHeader);
 
             var transcriptRegions = new ITranscriptRegion[]
             {
@@ -104,7 +104,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
         {
             Assert.Equal(expected.Length, observed.Length);
 
-            for (int refIndex = 0; refIndex < expected.Length; refIndex++)
+            for (var refIndex = 0; refIndex < expected.Length; refIndex++)
             {
                 var expectedIntervalArray = expected[refIndex];
                 var observedIntervalArray = observed[refIndex];
@@ -115,7 +115,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
                 Assert.NotNull(observedIntervalArray);
                 Assert.Equal(expectedIntervalArray.Array.Length, observedIntervalArray.Array.Length);
 
-                for (int i = 0; i < expectedIntervalArray.Array.Length; i++)
+                for (var i = 0; i < expectedIntervalArray.Array.Length; i++)
                 {
                     var expectedInterval = expectedIntervalArray.Array[i];
                     var observedInterval = observedIntervalArray.Array[i];
@@ -133,7 +133,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
 
             Assert.Equal(expectedList.Count, observedList.Count);
 
-            for (int i = 0; i < expectedList.Count; i++)
+            for (var i = 0; i < expectedList.Count; i++)
             {
                 var expectedEntry = expectedList[i];
                 var observedEntry = observedList[i];
@@ -150,7 +150,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
 
             Assert.Equal(expectedList.Count, observedList.Count);
 
-            for (int i = 0; i < expectedList.Count; i++)
+            for (var i = 0; i < expectedList.Count; i++)
             {
                 var expectedEntry = expectedList[i];
                 var observedEntry = observedList[i];
@@ -175,7 +175,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
 
                 ms.Position = 0;
 
-                using (var reader = new ExtendedBinaryReader(ms))
+                using (var reader = new BufferedBinaryReader(ms))
                 {
                     observedStrings = TranscriptCacheReader.ReadItems(reader, () => reader.ReadAsciiString());
                 }
@@ -195,7 +195,7 @@ namespace UnitTests.VariantAnnotation.IO.Caches
                 {
                     using (var writer = new ExtendedBinaryWriter(ms, Encoding.UTF8, true)) writer.Write(7);
                     ms.Position = 0;
-                    using (var reader = new ExtendedBinaryReader(ms)) TranscriptCacheReader.CheckGuard(reader);
+                    using (var reader = new BufferedBinaryReader(ms)) TranscriptCacheReader.CheckGuard(reader);
                 }
             });
         }

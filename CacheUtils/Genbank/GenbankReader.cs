@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using VariantAnnotation.Interface.Intervals;
+using Intervals;
+using OptimizedCore;
 using VariantAnnotation.Utilities;
 
 namespace CacheUtils.Genbank
@@ -34,7 +35,7 @@ namespace CacheUtils.Genbank
             // assert that the record starts with LOCUS
             if (!HasLocus()) return null;
 
-            var (transcriptId, transcriptVersion) = ParseHeader();
+            (string transcriptId, byte transcriptVersion) = ParseHeader();
             var featureData = ParseFeatures();
             ParseOrigin();
 
@@ -150,7 +151,7 @@ namespace CacheUtils.Genbank
 
         private static IInterval GetJoinInterval(string info)
         {
-            var cols  = info.Substring(5, info.Length - 6).Split(',');
+            var cols  = info.Substring(5, info.Length - 6).OptimizedSplit(',');
             int start = int.Parse(cols[0].Split("..")[0]);
             int end   = int.Parse(cols[1].Split("..")[1]);
             return new Interval(start, end);

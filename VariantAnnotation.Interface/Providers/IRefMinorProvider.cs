@@ -1,11 +1,10 @@
-﻿using VariantAnnotation.Interface.Sequence;
+﻿using System;
+using Genome;
 
 namespace VariantAnnotation.Interface.Providers
 {
-    public interface IRefMinorProvider
+    public interface IRefMinorProvider:IDisposable
     {
-        bool IsReferenceMinor(IChromosome chromosome, int pos);
-
-        string GetGlobalMajorAlleleForRefMinor(IChromosome chromosome, int pos);
+        string GetGlobalMajorAllele(IChromosome chromosome, int pos);
     }
 }

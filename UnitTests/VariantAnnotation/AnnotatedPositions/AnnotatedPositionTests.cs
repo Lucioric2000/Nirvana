@@ -1,9 +1,9 @@
-﻿using Moq;
+﻿using Genome;
+using Moq;
 using VariantAnnotation;
 using VariantAnnotation.AnnotatedPositions;
 using VariantAnnotation.Interface.Positions;
-using VariantAnnotation.Interface.Sequence;
-using VariantAnnotation.Sequence;
+using Variants;
 using Vcf;
 using Vcf.Info;
 using Vcf.Sample;
@@ -55,7 +55,7 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
 
         private IVariant[] GetVariants()
         {
-            var behavior = new AnnotationBehavior(false, false, false, false, false, false);
+            var behavior = new AnnotationBehavior(false, false, false, false, false);
             var variant = new Mock<IVariant>();
             variant.SetupGet(x => x.Chromosome).Returns(_chromosome);
             variant.SetupGet(x => x.Type).Returns(VariantType.SNV);
@@ -72,7 +72,7 @@ namespace UnitTests.VariantAnnotation.AnnotatedPositions
             var vcfFields = new string[8];
             vcfFields[0] = originalChromosomeName;
 
-            var infoData = new InfoData(null, null, VariantType.unknown, null, null, null, null, null, false, null, null, false, false, null,null, null);
+            var infoData = new InfoData(null, null, null, null, null, null, null, null, VariantType.unknown);
 
             return new Position(_chromosome, 949523, 949523, "C", new[] {"T"}, null, null, variants, samples, infoData,
                 vcfFields, new[] { false }, false);

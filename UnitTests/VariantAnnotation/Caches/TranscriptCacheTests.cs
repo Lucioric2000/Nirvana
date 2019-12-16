@@ -2,17 +2,14 @@
 using System.Collections.Generic;
 using System.Linq;
 using CacheUtils.TranscriptCache;
-using Moq;
+using Genome;
 using VariantAnnotation.AnnotatedPositions.Transcript;
 using VariantAnnotation.Caches;
 using VariantAnnotation.Caches.DataStructures;
 using VariantAnnotation.Interface.AnnotatedPositions;
 using VariantAnnotation.Interface.Caches;
-using VariantAnnotation.Interface.Intervals;
 using VariantAnnotation.Interface.Providers;
-using VariantAnnotation.Interface.Sequence;
 using VariantAnnotation.Providers;
-using VariantAnnotation.Sequence;
 using Xunit;
 
 namespace UnitTests.VariantAnnotation.Caches
@@ -21,7 +18,7 @@ namespace UnitTests.VariantAnnotation.Caches
     {
         private readonly ITranscriptCache _cache;
         private readonly IEnumerable<IDataSourceVersion> _expectedDataSourceVersions;
-        private const GenomeAssembly ExpectedGenomeAssembly = GenomeAssembly.hg19;
+        private const GenomeAssembly ExpectedAssembly = GenomeAssembly.hg19;
 
         private readonly IChromosome _chr1  = new Chromosome("chr1", "1", 0);
         private readonly IChromosome _chr11 = new Chromosome("chr11", "11", 10);
@@ -32,19 +29,15 @@ namespace UnitTests.VariantAnnotation.Caches
             var transcriptIntervalArrays       = GetTranscripts().ToIntervalArrays(11);
             var regulatoryRegionIntervalArrays = GetRegulatoryRegions().ToIntervalArrays(11);
 
-            _cache = new TranscriptCache(_expectedDataSourceVersions, ExpectedGenomeAssembly, transcriptIntervalArrays,
+            _cache = new TranscriptCache(_expectedDataSourceVersions, ExpectedAssembly, transcriptIntervalArrays,
                 regulatoryRegionIntervalArrays);
         }
 
         [Fact]
         public void GetOverlappingFlankingTranscripts_TwoOverlaps()
         {
-            var interval = new Mock<IChromosomeInterval>();
-            interval.SetupGet(x => x.Chromosome).Returns(_chr1);
-            interval.SetupGet(x => x.Start).Returns(100);
-            interval.SetupGet(x => x.End).Returns(200);
-
-            var overlappingTranscripts = _cache.GetOverlappingTranscripts(interval.Object);
+            var interval = new ChromosomeInterval(_chr1, 100, 200);
+            ITranscript[] overlappingTranscripts = _cache.TranscriptIntervalForest.GetAllFlankingValues(interval);
 
             Assert.NotNull(overlappingTranscripts);
             Assert.Equal(2, overlappingTranscripts.Length);
@@ -53,12 +46,8 @@ namespace UnitTests.VariantAnnotation.Caches
         [Fact]
         public void GetOverlappingFlankingTranscripts_NoOverlaps()
         {
-            var interval = new Mock<IChromosomeInterval>();
-            interval.SetupGet(x => x.Chromosome).Returns(_chr11);
-            interval.SetupGet(x => x.Start).Returns(5000);
-            interval.SetupGet(x => x.End).Returns(5001);
-
-            var overlappingTranscripts = _cache.GetOverlappingTranscripts(interval.Object);
+            var interval = new ChromosomeInterval(_chr11, 5000, 5001);
+            ITranscript[] overlappingTranscripts = _cache.TranscriptIntervalForest.GetAllFlankingValues(interval);
 
             Assert.Null(overlappingTranscripts);
         }
@@ -66,12 +55,8 @@ namespace UnitTests.VariantAnnotation.Caches
         [Fact]
         public void GetOverlappingRegulatoryRegions_OneOverlap()
         {
-            var interval = new Mock<IChromosomeInterval>();
-            interval.SetupGet(x => x.Chromosome).Returns(_chr1);
-            interval.SetupGet(x => x.Start).Returns(100);
-            interval.SetupGet(x => x.End).Returns(200);
-
-            var overlappingRegulatoryRegions = _cache.GetOverlappingRegulatoryRegions(interval.Object);
+            var overlappingRegulatoryRegions =
+                _cache.RegulatoryIntervalForest.GetAllOverlappingValues(_chr1.Index, 100, 200);
 
             Assert.NotNull(overlappingRegulatoryRegions);
             Assert.Single(overlappingRegulatoryRegions);
@@ -80,21 +65,17 @@ namespace UnitTests.VariantAnnotation.Caches
         [Fact]
         public void GetOverlappingRegulatoryRegions_NoOverlaps()
         {
-            var interval = new Mock<IChromosomeInterval>();
-            interval.SetupGet(x => x.Chromosome).Returns(_chr11);
-            interval.SetupGet(x => x.Start).Returns(5000);
-            interval.SetupGet(x => x.End).Returns(5001);
-
-            var overlappingRegulatoryRegions = _cache.GetOverlappingRegulatoryRegions(interval.Object);
+            var overlappingRegulatoryRegions =
+                _cache.RegulatoryIntervalForest.GetAllOverlappingValues(_chr1.Index, 5000, 5001);
 
             Assert.Null(overlappingRegulatoryRegions);
         }
 
         [Fact]
-        public void GenomeAssembly_Get()
+        public void Assembly_Get()
         {
-            var observedGenomeAssembly = _cache.GenomeAssembly;
-            Assert.Equal(ExpectedGenomeAssembly, observedGenomeAssembly);
+            var observedAssembly = _cache.Assembly;
+            Assert.Equal(ExpectedAssembly, observedAssembly);
         }
 
         [Fact]

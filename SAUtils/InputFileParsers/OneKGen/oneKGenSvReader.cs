@@ -1,81 +1,165 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
-using Compression.Utilities;
+using System.Linq;
+using Genome;
+using OptimizedCore;
 using SAUtils.DataStructures;
-using VariantAnnotation.Interface.Sequence;
+using VariantAnnotation.Interface.IO;
 
 namespace SAUtils.InputFileParsers.OneKGen
 {
-	public sealed class OneKGenSvReader
+	public sealed class OneKGenSvReader:IDisposable
 	{
 		#region members
 
-		private readonly FileInfo _oneKGenSvFile;
+		private readonly StreamReader _reader;
 	    private readonly IDictionary<string, IChromosome> _refNameDict;
+
+	    private string _svType;
+	    private int? _svEnd;
+	    private int? _svLen;
+
+	    private int? _allAlleleNumber;
+	    private int? _allAlleleCount;
+        private double? _allAlleleFrequency;
+	    private double? _afrAlleleFrequency;
+	    private double? _amrAlleleFrequency;
+	    private double? _eurAlleleFrequency;
+	    private double? _easAlleleFrequency;
+	    private double? _sasAlleleFrequency;
+
         #endregion
 
-        public OneKGenSvReader(FileInfo oneKGenSvFile, IDictionary<string, IChromosome> refNameDict)
+        public OneKGenSvReader(StreamReader reader, IDictionary<string, IChromosome> refNameDict)
 		{
-			_oneKGenSvFile = oneKGenSvFile;
-		    _refNameDict = refNameDict;
+			_reader = reader;
+		    _refNameDict  = refNameDict;
 		}
 
-		public IEnumerable<OneKGenItem> GetOneKGenSvItems()
+		public IEnumerable<OnekGenSvItem> GetItems()
 		{
-			using (var reader = GZipUtilities.GetAppropriateStreamReader(_oneKGenSvFile.FullName))
-			{
-				string line;
-				while ((line = reader.ReadLine()) != null)
-				{
-					// Skip empty lines.
-					if (string.IsNullOrWhiteSpace(line)) continue;
-					// Skip comments.
-					if (line.StartsWith("#")) continue;
-					var oneKSvGenItem = ExtractOneKGenSvItem(line, _refNameDict);
-					if (oneKSvGenItem == null ) continue;
-					yield return oneKSvGenItem;
+		    string line;
+		    while ((line = _reader.ReadLine()) != null)
+		    {
+                // Skip empty lines.
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-				}
-			}
+                // Skip comments.
+                if (line.OptimizedStartsWith('#')) continue;
+		        var oneKSvGenItem = ExtractOneKGenSvItem(line);
+		        if (oneKSvGenItem == null) continue;
+		        yield return oneKSvGenItem;
+
+		    }
+        }
+	    private void Clear()
+	    {
+	        _allAlleleNumber = null;
+	        _allAlleleFrequency = null;
+	        _afrAlleleFrequency = null;
+	        _amrAlleleFrequency = null;
+	        _eurAlleleFrequency = null;
+	        _easAlleleFrequency = null;
+	        _sasAlleleFrequency = null;
+
+	        _svEnd = null;
+	        _svLen = null;
+	        _svType = null;
+	    }
+
+        private OnekGenSvItem ExtractOneKGenSvItem(string line)
+		{
+		    var splitLine = line.OptimizedSplit('\t');// we don't care about the many fields after info field
+		    if (splitLine.Length < 8) return null;
+
+		    var altAlleles = splitLine[VcfCommon.AltIndex].OptimizedSplit(',');
+		    var hasSymbolicAllele = altAlleles.Any(x => x.OptimizedStartsWith('<') && x.OptimizedEndsWith('>'));
+
+            if (!hasSymbolicAllele)
+		        return null;
+
+            var chromosomeName = splitLine[VcfCommon.ChromIndex];
+		    if (!_refNameDict.ContainsKey(chromosomeName)) return null;
+		    var chromosome = _refNameDict[chromosomeName];
+		    var position = int.Parse(splitLine[VcfCommon.PosIndex]);//we have to get it from RSPOS in info
+		    var id = splitLine[VcfCommon.IdIndex];
+		    //var refAllele = splitLine[VcfCommon.RefIndex];
+		    var infoFields = splitLine[VcfCommon.InfoIndex];
+            Clear();
+		    ParseInfoField(infoFields);
+
+		    if (_svEnd == null  && _svLen!=null)
+		    {
+		        _svEnd = position + _svLen;
+		    }
+
+		    if (_svEnd == null)
+		        return null;
+
+		    var variantType = SaParseUtilities.GetSequenceAlteration(_svType);
+            return new OnekGenSvItem(chromosome, position+1, _svEnd.Value, variantType, id,  
+				_allAlleleNumber, _allAlleleCount,
+                _allAlleleFrequency, _afrAlleleFrequency, _amrAlleleFrequency, _easAlleleFrequency, _eurAlleleFrequency, _sasAlleleFrequency);
 		}
 
-		private static OneKGenItem ExtractOneKGenSvItem(string line, IDictionary<string,IChromosome> refNameDict)
-		{
-			var cols = line.Split('\t');
-			if (cols.Length < 8) return null;
+	    private void ParseInfoField(string infoFields)
+	    {
+	        if (infoFields == "" || infoFields == ".") return;
+	        var infoItems = infoFields.OptimizedSplit(';');
 
-			var id = cols[0];
-		    if (!refNameDict.ContainsKey(cols[1])) return null;
-		    var chromosome = refNameDict[cols[1]];
+	        foreach (string infoItem in infoItems)
+	        {
+	            (string key, string value) = infoItem.OptimizedKeyValue();
 
+	            // sanity check
+	            if (value != null) SetInfoField(key, value);
+	        }
+	    }
+        //1       668630  esv3584976      G       <CN2>   100     PASS    AC=64;AF=0.0127796;AN=5008;CIEND=-150,150;CIPOS=-150,150;CS=DUP_delly;END=850204;NS=2504;SVTYPE=DUP;IMPRECISE;DP=22135;EAS_AF=0.0595;AMR_AF=0;AFR_AF=0.0015;EUR_AF=0.001;SAS_AF=0.001;VT=SV;EX_TARGET
+        private void SetInfoField(string vcfAfId, string value)
+	    {
+	        switch (vcfAfId)
+	        {
+	            case "SVTYPE":
+	                _svType = value;// for SVs there is only one value in SVTYPE
+	                break;
+                case "SVLEN":
+                    _svLen = Convert.ToInt32(value);
+                    break;
+                case "END":
+	                _svEnd = Convert.ToInt32(value);
+	                break;
+                case "AN":
+	                _allAlleleNumber = Convert.ToInt32(value);
+	                break;
+	            case "AC":
+	                _allAlleleCount = value.OptimizedSplit(',').Select(val => Convert.ToInt32(val)).Sum();
+	                break;
+                case "AF":
+	                _allAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+	                break;
+	            case "AMR_AF":
+	                _amrAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+                    break;
+	            case "AFR_AF":
+	                _afrAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+                    break;
+	            case "EUR_AF":
+	                _eurAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+                    break;
+	            case "EAS_AF":
+	                _easAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+                    break;
+	            case "SAS_AF":
+	                _sasAlleleFrequency = value.OptimizedSplit(',').Select(Convert.ToDouble).ToArray().Sum();
+                    break;
+	        }
+	    }
 
-			var start = int.Parse(cols[2]);
-			var end = int.Parse(cols[3]);
-			var variantType = cols[4];
-
-			var observedGains =  int.Parse(cols[6]);
-			var observedLosses = int.Parse(cols[7]);
-
-			var allFrequency = cols[8].Equals("0")? null:cols[8];
-			var easFrequency = cols[62].Equals("0") ? null : cols[62];
-			var eurFrequency = cols[64].Equals("0") ? null : cols[64];
-			var afrFrequency = cols[66].Equals("0") ? null : cols[66];
-			var amrFrequency = cols[68].Equals("0") ? null : cols[68];
-			var sasFrequency = cols[70].Equals("0") ? null : cols[70];
-
-			var allAlleleNumber = int.Parse(cols[5]);
-			var easAlleleNumber = int.Parse(cols[61]);
-			var eurAlleleNumber = int.Parse(cols[63]);
-			var afrAlleleNumber = int.Parse(cols[65]);
-			var amrAlleleNumber = int.Parse(cols[67]);
-			var sasAlleleNumber = int.Parse(cols[69]);
-
-			return new OneKGenItem(chromosome, start, id, null, null, null, 
-				afrFrequency, allFrequency, amrFrequency,easFrequency, eurFrequency, sasFrequency,
-				null,null,null,null,null,null,
-				allAlleleNumber, afrAlleleNumber, amrAlleleNumber, eurAlleleNumber, easAlleleNumber, sasAlleleNumber,
-				variantType, end, observedGains, observedLosses);
-		}
-        
+	    public void Dispose()
+	    {
+	        _reader?.Dispose();
+	    }
 	}
 }

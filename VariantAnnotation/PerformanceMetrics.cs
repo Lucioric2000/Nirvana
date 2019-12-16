@@ -1,7 +1,7 @@
 ﻿using System;
 using CommandLine.Utilities;
+using Genome;
 using VariantAnnotation.Interface;
-using VariantAnnotation.Interface.Sequence;
 
 namespace VariantAnnotation
 {
@@ -58,7 +58,7 @@ namespace VariantAnnotation
         {
             var annotationTime = Benchmark.ToHumanReadable(_benchmark.GetElapsedTime());
 
-            _benchmark.GetElapsedIterationTime(_numVariantsInReference, "variants", out double variantsPerSecond);
+            _benchmark.GetElapsedIterationTime(_numVariantsInReference, out double variantsPerSecond);
             _numVariantsInReference = 0;
 
             _logger.WriteLine($"{annotationTime} {variantsPerSecond,12:N0}");

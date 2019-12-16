@@ -1,9 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using ErrorHandling.Exceptions;
-using VariantAnnotation.Interface.Intervals;
-using VariantAnnotation.Interface.IO;
-using VariantAnnotation.Caches.DataStructures;
+using Intervals;
+using IO;
 
 namespace Jasix.DataStructures
 {
@@ -23,14 +22,14 @@ namespace Jasix.DataStructures
             _intervalArray    = null;
         }
 
-        public JasixChrIndex(IExtendedBinaryReader reader) : this("")
+        public JasixChrIndex(ExtendedBinaryReader reader) : this("")
         {
             ReferenceSequence = reader.ReadAsciiString();
-            var count = reader.ReadOptInt32();
+            int count = reader.ReadOptInt32();
             for (var i = 0; i < count; i++)
                 _nodes.Add(new JasixNode(reader));
 
-            var intervalCount = reader.ReadOptInt32();
+            int intervalCount = reader.ReadOptInt32();
             if (intervalCount == 0) return;
 
             for (var i = 0; i < intervalCount; i++)
@@ -39,11 +38,11 @@ namespace Jasix.DataStructures
             _intervalArray = new IntervalArray<long>(_largeVariants.ToArray());
         }
 
-        private static Interval<long> ReadInterval(IExtendedBinaryReader reader)
+        private static Interval<long> ReadInterval(ExtendedBinaryReader reader)
         {
-            var begin    = reader.ReadOptInt32();
-            var end      = reader.ReadOptInt32();
-            var position = reader.ReadOptInt64();
+            int begin    = reader.ReadOptInt32();
+            int end      = reader.ReadOptInt32();
+            long position = reader.ReadOptInt64();
 
             return new Interval<long>(begin, end, position);
         }
@@ -63,7 +62,7 @@ namespace Jasix.DataStructures
 	        writer.WriteOpt(_largeVariants.Count);
 	        if (_largeVariants.Count == 0) return;
 
-	        foreach (var interval in _largeVariants.OrderBy(x => x.Begin).ThenBy(x => x.End))
+	        foreach (Interval<long> interval in _largeVariants.OrderBy(x => x.Begin).ThenBy(x => x.End))
 	        {
 		        WriteInterval(interval, writer);
 	        }
@@ -84,7 +83,7 @@ namespace Jasix.DataStructures
 			if (Utilities.IsLargeVariant(begin,end))
             {
                 _largeVariants.Add(new Interval<long>(begin, end, filePosition));
-                end = begin;// large variants will be recorded as snvs so that we can query for all entries from a given position
+                end = begin;// large variants will be recorded as SNVs so that we can query for all entries from a given position
             }
 
 			if (_currentNode == null)
@@ -118,7 +117,7 @@ namespace Jasix.DataStructures
 
 	    private JasixNode FindFirstOverlappingNode(JasixNode searchNode)
 	    {
-		    var index = _nodes.BinarySearch(searchNode);
+		    int index = _nodes.BinarySearch(searchNode);
 
 		    if (index < 0)
 			    index = ~index;
@@ -144,7 +143,7 @@ namespace Jasix.DataStructures
 
 	    public long[] FindLargeVariants(int begin, int end)
         {
-            var positions = _intervalArray?.GetAllOverlappingValues(begin, end);
+            long[] positions = _intervalArray?.GetAllOverlappingValues(begin, end);
 
             if (positions == null || positions.Length == 0) return null;
             return positions;
