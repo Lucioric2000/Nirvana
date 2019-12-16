@@ -134,8 +134,8 @@ unpack_file() {
     if [ ! -f $4 ]
     then
 	pushd $2 > /dev/null
-	echo -n "- unpacking $1 files... "
-	tar xfz $3
+	echo -n "- unpacking $1 files... ($2) ($3) ($4)"
+	sudo tar -xfz $3
 	echo "finished."
 	popd > /dev/null
 	rm $3

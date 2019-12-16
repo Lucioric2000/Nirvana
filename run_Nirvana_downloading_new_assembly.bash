@@ -63,6 +63,33 @@ then
     URL_LIST="$URL_LIST http://illumina-annotation.s3.amazonaws.com/SA/$SA_VERSION/v${SA_VERSION}_${GENOME_ASSEMBLY}.tar.gz"
 fi
 
+if [ ! -z "$URL_LIST" ]
+then
+    echo -n "- downloading up to ~27 GB of data files in parallel (this will probably take a while)... "
+    echo $URL_LIST | xargs -n 1 -P 8 sudo wget -qcP Data
+    echo "finished."
+fi
+
+# =====================
+# unpack the data files
+# =====================
+
+unpack_file() {
+    if [ ! -f $4 ]
+    then
+	pushd $2 > /dev/null
+	echo -n "- unpacking $1 files... "
+	sudo tar xfz $3
+	echo "finished."
+	popd > /dev/null
+	sudo rm $3
+    fi
+}
+
+unpack_file "reference" $DATA_DIR $REF_TGZ $REF_TEST
+unpack_file "cache" $DATA_DIR $CACHE_TGZ $CACHE_TEST
+unpack_file "supplementary annotation $GENOME_ASSEMBLY" $SA_DIR $SA_TGZ $SA_TEST
+
 # analyze it with Nirvana
 COMMAND="dotnet $NIRVANA_BIN -c $CACHE_DIR/Ensembl --sd $SA_DIR/$GENOME_ASSEMBLY -r $REF_TEST -i HiSeq.10000.vcf -o HiSeq.10000.annotated"
 echo Running $COMMAND
